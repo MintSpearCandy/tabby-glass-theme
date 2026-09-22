@@ -4,3 +4,5 @@ dist/
 test-env/
 *.log
 .DS_Store
+*.tgz
+*.tabby-plugin
