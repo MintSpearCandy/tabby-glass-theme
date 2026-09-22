@@ -1,0 +1,362 @@
+// ============================================================
+// Tabby Glass Theme — v1 (方案 B: 窗口内 CSS 合成)
+//
+// 本文件会被编译为完整样式表, 整体替换 Tabby 的 <style id="theme">
+// 因此必须自带 Bootstrap 基础样式, 与官方默认主题 theme.new.scss 做法一致.
+//
+// 视觉蓝本: ~/.config/wezterm (自旧 Tabby 配置迁移)
+//   background.lua  — 壁纸 + 渐变遮罩 + 透明度
+//   appearance.lua  — 标签栏三态 / 高度 / 字体
+//   colors.lua      — IR_Black 前景色阶
+// ============================================================
+
+// ============ 可调设计参数 (对应 wezterm 各模块) ============
+
+// --- 背景图层 (wezterm background.lua 基础上微调: 深而有体量) ---
+$wallpaper-url: 'file:///D:/App/Tabby/resources/ac041_void棺材胡桃4k.jpg';
+$wallpaper-opacity: 0.7;   // wezterm 0.6; 壁纸隐约可见 → 背景有体积感而非死黑
+$overlay-top: 0.5;         // wezterm 0.65; 顶部略轻
+$overlay-bottom: 0.78;     // wezterm 0.9; 底部厚重但留出层次
+
+// --- 前景色阶 (colors.lua IR_Black) ---
+$fg: #f1f1f1;              // 主前景
+$fg-hover: #d6d6d6;        // 悬停前景
+$fg-dim: #8a8a8a;          // 非激活前景
+$accent: #96cafe;          // IR_Black 蓝 (链接/焦点/指示器)
+$accent-bright: #b5dcff;
+
+// --- 标签栏 (appearance.lua) ---
+$tabs-height: 32px;        // wezterm 42px 物理 @150% ≈ 28 DIP; 取原生 WCO 按钮高度 32px 为下限
+$tab-hover-bg: rgba(255, 255, 255, 0.05);   // 悬停: 轻微受光
+$tab-active-bg: rgba(255, 255, 255, 0.1);   // 激活: 亮玻璃片 (替代 wezterm 的加暗, 消除凹陷感)
+$tab-font-size: 12px;      // wezterm window_frame.font_size 9.0pt = 12px
+
+// --- 玻璃面板 (Tabby 特有 UI: 设置/模态/下拉) ---
+// 暗面板 + 亮边: 深色玻璃配白色高光描边与顶部受光, 从深色背景中突出
+$glass-bg: rgba(12, 14, 19, 0.88);
+$glass-bg-deep: rgba(8, 10, 14, 0.93);
+$glass-border: rgba(255, 255, 255, 0.18);
+$glass-highlight: rgba(255, 255, 255, 0.14);  // 顶部受光内高光
+$glass-blur: 32px;
+$glass-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+
+// --- 终端内边距 (appearance.lua window_padding) ---
+$terminal-padding: 6px 18px;
+
+// ============ Bootstrap 编译期变量 ============
+
+$font-family-sans-serif: "Microsoft YaHei", "Segoe UI", "Source Sans Pro", sans-serif;
+// UI 全局字号基准: wezterm window_frame.font_size 9.0pt = 12px = 0.75rem
+// (官方默认主题为 14px, Bootstrap 裸默认 16px —— 均显著大于 wezterm 观感)
+// 必须用 rem: Bootstrap 内部有 $font-size-base * line-height + rem-padding 的单位混合运算
+$font-size-base: 0.75rem;
+$line-height-base: 1.5;
+// 控件内边距随字号收紧 (官方默认主题在 14px 基准下用 .3rem/.9rem)
+$input-btn-padding-y: 0.25rem;
+$input-btn-padding-x: 0.8rem;
+$input-btn-line-height: 1.5;
+$primary: $accent;
+$body-color: $fg;
+$body-bg: #0a0c10;
+$border-color: rgba(255, 255, 255, 0.1);
+$border-radius: 8px;
+
+$input-bg: rgba(0, 0, 0, 0.35);
+$input-color: $fg;
+$input-border-color: rgba(255, 255, 255, 0.12);
+$input-placeholder-color: $fg-dim;
+
+$modal-content-bg: $glass-bg;
+$modal-content-border-color: $glass-border;
+$dropdown-bg: $glass-bg-deep;
+$dropdown-border-color: $glass-border;
+$dropdown-link-color: $fg;
+$dropdown-link-hover-bg: rgba(255, 255, 255, 0.06);
+$popover-bg: $glass-bg-deep;
+$popover-border-color: $glass-border;
+$tooltip-bg: rgba(20, 22, 28, 0.95);
+$tooltip-color: $fg;
+
+$list-group-bg: rgba(255, 255, 255, 0.03);
+$list-group-border-color: rgba(255, 255, 255, 0.06);
+$list-group-hover-bg: rgba(255, 255, 255, 0.06);
+
+$nav-link-color: $fg-dim;
+$nav-link-hover-color: $fg;
+
+// --- Bootstrap 基座 (不可删除, 否则整个 UI 失去样式) ---
+@import '~bootstrap/scss/bootstrap.scss';
+
+// ============ 运行时变量 (深色模式, BS5.3 CSS vars) ============
+
+:root {
+    color-scheme: dark;
+    --bs-body-color: #{$fg};
+    --bs-body-color-rgb: 241, 241, 241;
+    --bs-body-bg: #0a0c10;
+    --bs-emphasis-color: #ffffff;
+    --bs-secondary-color: rgba(241, 241, 241, 0.64);
+    --bs-tertiary-color: rgba(241, 241, 241, 0.42);
+    --bs-secondary-bg: rgba(255, 255, 255, 0.07);
+    --bs-tertiary-bg: rgba(255, 255, 255, 0.04);
+    --bs-border-color: rgba(255, 255, 255, 0.09);
+    --bs-link-color: #{$accent};
+    --bs-link-color-rgb: 150, 202, 254;
+    --bs-link-hover-color: #{$accent-bright};
+    --bs-focus-ring-color: rgba(150, 202, 254, 0.35);
+}
+
+// ============ 背景图层栈 (自底向上: 黑底 → 壁纸 → 渐变遮罩) ============
+// 复刻 wezterm background.lua 的叠加顺序, 全部收在窗口内部.
+// 黑底放在 app-root 自身 (而非 body): 宿主 app 样式表里有一条
+// body{background:rgba(0,0,0,0)} (为 vibrancy 留的透明底) 会覆盖 body 上的色值.
+
+body {
+    color: $fg;
+    overflow: hidden;
+}
+
+app-root {
+    background: #06080c;   // 近黑微蓝底 (纯黑过"空", 轻透方向微提), 绘制于 ::before/::after 之下
+
+    // 亚克力增强分支 (等效 wezterm M.acrylic = true):
+    // 开启 appearance.vibrancy (+ fluent) 时宿主为 app-root 挂 .vibrant,
+    // 黑底转透明让系统亚克力成为最底层, 从壁纸层 (0.6) 与渐变层透出模糊
+    &.vibrant {
+        background: transparent;
+    }
+
+    // 与 spaciness 解耦并钳制下限: 原生 WCO 窗口按钮固定 32px 高,
+    // 标签栏低于它会导致按钮溢出 (spaciness 0.8 时 32*0.8=25.6px 即触雷)
+    --tabs-height: max(#{$tabs-height}, calc(#{$tabs-height} * var(--spaciness))) !important;
+
+    // 壁纸层: cover / center, 自身不透明度 0.6
+    &::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background: url("#{$wallpaper-url}") center / cover no-repeat;
+        opacity: $wallpaper-opacity;
+    }
+
+    // 渐变遮罩层: 顶部 0.65 → 底部 0.9 (DOM 序在 ::before 之后, 同层级绘制在上)
+    &::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background: linear-gradient(
+            180deg,
+            rgba(0, 0, 0, $overlay-top),
+            rgba(0, 0, 0, $overlay-bottom)
+        );
+    }
+}
+
+// ============ 标签栏 (appearance.lua: 全透明 + 三态标签) ============
+
+app-root .main.content .tab-bar {
+    background: transparent;   // 标签栏直接透出壁纸
+    border-bottom: none;
+    box-shadow: none;
+
+    // 工具栏按钮 (新建标签 / 设置 / 右侧功能键)
+    .btn-tab-bar {
+        background: transparent;
+        color: $fg-dim;
+        line-height: calc(var(--tabs-height) + 2px);
+        border: none;
+        border-radius: 0;
+
+        // 压制组件默认的大写 + 加粗 (wezterm 为常规字重 9pt)
+        font-size: $tab-font-size;
+        font-weight: 400;
+        text-transform: none;
+
+        svg, path {
+            fill: $fg-dim;
+            fill-opacity: 0.9;
+        }
+
+        &:hover {
+            background: $tab-hover-bg !important;
+            color: $fg-hover;
+            svg, path { fill: $fg-hover; }
+        }
+        &:active {
+            background: $tab-active-bg !important;
+            box-shadow: inset 0 1px 0 $glass-highlight;
+        }
+    }
+
+    // 标签三态: 非激活透明灰字 / 悬停受光 / 激活亮玻璃片
+    .tabs tab-header {
+        color: $fg-dim;
+        background: transparent;
+        font-size: $tab-font-size;
+        transition: background 0.15s ease-out, color 0.15s ease-out;
+
+        .name {
+            color: inherit;
+            font-size: $tab-font-size;
+            margin-left: 0;   // 序号隐藏后清掉组件样式的额外左边距, 恢复左右对称
+        }
+
+        // wezterm: show_tab_index_in_tab_bar = false
+        .index { display: none; }
+
+        .buttons button {
+            color: inherit;
+            &:hover { background: rgba(255, 255, 255, 0.1); }
+        }
+
+        &:hover {
+            background: $tab-hover-bg;
+            color: $fg-hover;
+        }
+
+        // 激活: 亮玻璃片 (顶部受光 + 微内描边), 视觉凸起而非加暗凹陷
+        &.active {
+            background: $tab-active-bg;
+            color: $fg;
+            box-shadow:
+                inset 0 1px 0 $glass-highlight,
+                inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        }
+
+        .progressbar { background: $accent; }
+        .activity-indicator { background: rgba(255, 255, 255, 0.25); }
+        .current-tab-indicator { background: $accent; }
+    }
+}
+
+// 标签名可选的标题栏组件 (如标签在底部时) 同样保持透明
+title-bar {
+    background: transparent;
+}
+
+// ============ 终端区 ============
+
+// 终端视口本体走 index.ts 的 terminalBackground: #00000000 (xterm allowTransparency: true)
+tab-body {
+    background: transparent;
+}
+
+// 终端内边距 (wezterm window_padding: 左右 18, 上下 6)
+terminal-tab > .content,
+ssh-tab > .content,
+telnet-tab > .content,
+serial-tab > .content {
+    padding: $terminal-padding;
+}
+
+// 开始页 / 空窗口
+start-page {
+    background: transparent;
+    color: $fg;
+}
+
+// ============ 滚动条 (细 + 半透明) ============
+
+::-webkit-scrollbar,
+.xterm .xterm-viewport::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-thumb,
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 4px;
+
+    &:hover { background: rgba(255, 255, 255, 0.22); }
+}
+
+::-webkit-scrollbar-track,
+.xterm .xterm-viewport::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+// ============ 玻璃面板 (模态 / 下拉 / 气泡) ============
+// 亮边玻璃: 白色高光描边 + 顶部受光内影 + 更强模糊, 视觉凸起
+
+.modal-content {
+    background: $glass-bg;
+    backdrop-filter: blur(#{$glass-blur}) saturate(1.4);
+    border: 1px solid $glass-border;
+    border-radius: 12px;
+    box-shadow: inset 0 1px 0 $glass-highlight, $glass-shadow;
+}
+
+.dropdown-menu {
+    background: $glass-bg-deep;
+    backdrop-filter: blur(#{$glass-blur}) saturate(1.4);
+    border: 1px solid $glass-border;
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 $glass-highlight, $glass-shadow;
+}
+
+.popover {
+    background: $glass-bg-deep;
+    backdrop-filter: blur(#{$glass-blur}) saturate(1.4);
+    border: 1px solid $glass-border;
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 $glass-highlight, $glass-shadow;
+}
+
+// ============ 控件微调 ============
+
+// 次级按钮: 半透明玻璃面 + 受光顶边 (Tabby 大量使用 .btn-secondary)
+.btn-secondary {
+    --bs-btn-bg: rgba(255, 255, 255, 0.07);
+    --bs-btn-color: #{$fg};
+    --bs-btn-border-color: rgba(255, 255, 255, 0.16);
+    --bs-btn-hover-bg: rgba(255, 255, 255, 0.13);
+    --bs-btn-hover-color: #ffffff;
+    --bs-btn-hover-border-color: rgba(255, 255, 255, 0.24);
+    --bs-btn-active-bg: rgba(255, 255, 255, 0.18);
+    --bs-btn-active-color: #ffffff;
+    --bs-btn-active-border-color: rgba(255, 255, 255, 0.28);
+    --bs-btn-disabled-bg: rgba(255, 255, 255, 0.04);
+    --bs-btn-disabled-color: rgba(241, 241, 241, 0.4);
+    --bs-btn-disabled-border-color: transparent;
+
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+// 表单输入: 暗色玻璃内槽 (深于面板 + 亮边, 有层次不凹陷)
+.form-control,
+.form-select {
+    background-color: rgba(0, 0, 0, 0.35);
+    border-color: rgba(255, 255, 255, 0.14);
+    color: $fg;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+    &:focus {
+        background-color: rgba(0, 0, 0, 0.3);
+        border-color: rgba(150, 202, 254, 0.55);
+        box-shadow: 0 0 0 2px rgba(150, 202, 254, 0.2);
+        color: $fg;
+    }
+}
+
+// 文本选区 (UI 部分; 终端内选区由配色方案控制)
+::selection {
+    background: rgba(150, 202, 254, 0.35);
+    color: #ffffff;
+}
+
+// 焦点指示
+:focus-visible {
+    outline: 1px solid rgba(150, 202, 254, 0.6);
+    outline-offset: -1px;
+}
+
+// 搜索面板 (Ctrl+Shift+F)
+search-panel {
+    background: $glass-bg-deep;
+    backdrop-filter: blur(#{$glass-blur});
+    border: 1px solid $glass-border;
+    border-radius: 8px;
+}

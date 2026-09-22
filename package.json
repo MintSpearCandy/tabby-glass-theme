@@ -1,0 +1,48 @@
+{
+  "name": "tabby-glass-theme",
+  "version": "0.2.0",
+  "description": "Dark glass theme for Tabby (深色玻璃质感主题)",
+  "keywords": [
+    "tabby-plugin"
+  ],
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "webpack --progress --color",
+    "watch": "webpack --progress --color --watch"
+  },
+  "author": "MSGhast",
+  "license": "MIT",
+  "peerDependencies": {
+    "@angular/core": "^15",
+    "tabby-core": "*",
+    "tabby-settings": "*",
+    "tabby-terminal": "*"
+  },
+  "devDependencies": {
+    "@angular/core": "^15.2.0",
+    "bootstrap": "^5.3.3",
+    "css-loader": "^6.10.0",
+    "sass": "^1.71.0",
+    "sass-loader": "^13.3.3",
+    "tabby-core": "*",
+    "to-string-loader": "^1.2.0",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.4.0",
+    "webpack": "^5.90.0",
+    "webpack-cli": "^5.1.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MintSpearCandy/tabby-glass-theme.git"
+  },
+  "homepage": "https://github.com/MintSpearCandy/tabby-glass-theme#readme",
+  "bugs": {
+    "url": "https://github.com/MintSpearCandy/tabby-glass-theme/issues"
+  }
+}
