@@ -15,6 +15,45 @@ import { ConfigService } from 'tabby-core'
                     class="form-check-input"
                     type="checkbox"
                     role="switch"
+                    id="glassThemeEnabled"
+                    [checked]="glass.themeEnabled !== false"
+                    (change)="setThemeEnabled($event)"
+                >
+                <label class="form-check-label" for="glassThemeEnabled">
+                    启用 Glass 主题 (Theme 注入总开关)
+                </label>
+                <div class="glass-lock-note">
+                    <small class="text-muted" *ngIf="glass.themeEnabled !== false; else themeOffHint">
+                        Glass CSS 与以下设置接管中; 被锁项在 设置 → Window 页显示
+                        <i class="fas fa-lock glass-lock-badge"></i> 标记。
+                        <strong>关闭开关将完整还原您的原主题与全部配置</strong> (含字体/配色等迁移项):
+                    </small>
+                    <ng-template #themeOffHint>
+                        <small class="text-muted">
+                            主题注入已关闭 —— 您自己的主题与配置已还原 (Glass 未修改任何您的原始值,
+                            快照保存在 glass.lockBackup)。重新打开即恢复玻璃主题接管
+                        </small>
+                    </ng-template>
+                    <ul class="glass-lock-list" *ngIf="glass.themeEnabled !== false">
+                        <li><i class="fas fa-lock glass-lock-badge"></i> 外观主题 → Glass</li>
+                        <li><i class="fas fa-lock glass-lock-badge"></i> 标签页位置 → 顶部</li>
+                        <li><i class="fas fa-lock glass-lock-badge"></i> 窗口边框 → 细边框 (Thin)</li>
+                        <li><i class="fas fa-lock glass-lock-badge"></i> 窗口不透明度 → 0.93</li>
+                        <li><i class="fas fa-lock glass-lock-badge"></i> 亚克力背景 (Vibrancy) → 关闭</li>
+                        <li><i class="fas fa-lock glass-lock-badge"></i> 终端背景 → 跟随主题</li>
+                        <li><i class="fas fa-lock glass-lock-badge"></i> 停靠终端 → 关闭</li>
+                        <li><i class="fas fa-lock glass-lock-badge"></i> 配置文件侧栏 → 关闭</li>
+                        <li><i class="fas fa-lock glass-lock-badge"></i> 标签页宽度 → 固定 (非弹性)</li>
+                        <li><i class="fas fa-lock glass-lock-badge"></i> 终端字体/配色/前端 → Glass 预设</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="form-check form-switch">
+                <input
+                    class="form-check-input"
+                    type="checkbox"
+                    role="switch"
                     id="glassWallpaperEnabled"
                     [checked]="glass.wallpaperEnabled !== false"
                     (change)="setEnabled($event)"
@@ -96,6 +135,14 @@ export class GlassSettingsTabComponent {
 
     setEnabled (event: Event): void {
         this.glass.wallpaperEnabled = (event.target as HTMLInputElement).checked
+        this.save()
+    }
+
+    setThemeEnabled (event: Event): void {
+        const on = (event.target as HTMLInputElement).checked
+        this.glass.themeEnabled = on
+        // 总开关立即生效 (接管/还原), 不等 debounce 分发链
+        ;(window as any).__glassSetTheme?.(on)
         this.save()
     }
 
