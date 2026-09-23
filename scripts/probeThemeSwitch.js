@@ -10,7 +10,7 @@
  */
 const fs = require('fs')
 const PORT = process.env.CDP_PORT || 9231
-const CFG = 'D:/Home/Project/TabbyPlugins/WebViewer/test-env/tabby-port/data/config.yaml'
+const CFG = process.env.GLASS_CFG || 'D:/Home/Project/TabbyPlugins/WebViewer/test-env/tabby-port/data/config.yaml'
 
 async function connectMain () {
     let list
@@ -103,6 +103,13 @@ async function main () {
     check('yaml: theme 回默认主题名', /theme: Follow the color scheme/.test(yamlOff))
     check('yaml: flexTabs 回 true', /flexTabs: true/.test(yamlOff))
     check('yaml: 无 font 行 (还原未设置态)', !/font: Cascadia/.test(yamlOff))
+
+    console.log('== 阶段2.5: save 风暴回归 (静置 8s, yaml mtime 不变) ==')
+    await sleep(2000)
+    const m1 = fs.statSync(CFG).mtimeMs
+    await sleep(8000)
+    const m2 = fs.statSync(CFG).mtimeMs
+    check('静置期无 save 风暴 (mtime 不变)', m1 === m2, 'mtime ' + m1 + ' -> ' + m2)
 
     console.log('== 阶段3: 重开 (__glassSetTheme(true)) ==')
     await conn.evalIn(`window.__glassSetTheme(true); 1`)

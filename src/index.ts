@@ -195,6 +195,13 @@ class GlassConfigProvider extends ConfigProvider {
                     const raw = (config as any)._store
                     return spec.section ? raw?.[spec.section]?.[spec.key] : raw?.[spec.key]
                 }
+                // store 视图值: 经 proxy get 读取 (real 无值时自动回退 defaults) —— 与组件实际读到的
+                // 完全一致. 守约必须用它比较: ConfigProxy 的 set 对 deepEqual 默认值的写入会从 _store
+                // 删键 (raw 变回 undefined), 若按 raw 比较则锁定值==默认值的键会永远判定 drift,
+                // 与 changed$ 形成 save 死循环 (打开设置页时卡死的根因).
+                const storeValue = (spec: OverrideSpec): any => {
+                    return spec.section ? config.store[spec.section][spec.key] : (config.store as any)[spec.key]
+                }
                 const writeValue = (spec: OverrideSpec, value: any): void => {
                     if (spec.section) {
                         config.store[spec.section][spec.key] = value
@@ -345,7 +352,7 @@ class GlassConfigProvider extends ConfigProvider {
                     if (isThemeEnabled()) {
                         let drifted = false
                         for (const spec of OVERRIDES) {
-                            if (spec.guarded && !sameValue(rawValue(spec), spec.value)) {
+                            if (spec.guarded && !sameValue(storeValue(spec), spec.value)) {
                                 writeValue(spec, spec.value)
                                 drifted = true
                             }
