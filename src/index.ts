@@ -1,5 +1,5 @@
 import { NgModule, Injectable, Injector, ApplicationRef, NgZone } from '@angular/core'
-import { Theme, ConfigProvider, ConfigService, HostWindowService, HotkeysService, HotkeyProvider, HotkeyDescription } from 'tabby-core'
+import { Theme, ConfigProvider, ConfigService, HostWindowService, HotkeysService, HotkeyProvider, HotkeyDescription, ThemesService } from 'tabby-core'
 import { TerminalColorSchemeProvider } from 'tabby-terminal'
 import { SettingsTabProvider } from 'tabby-settings'
 
@@ -258,7 +258,12 @@ class GlassConfigProvider extends ConfigProvider {
                     }
                     for (const spec of OVERRIDES) {
                         const id = (spec.section ?? '_') + '.' + spec.key
-                        const original = backup[id]
+                        let original = backup[id]
+                        // 兜底映射: 快照里 theme 若是未映射的 Glass (任何历史路径造成),
+                        // 还原目标强制改为默认主题 —— 保证关闭后 Glass CSS 一定卸载
+                        if (spec.key === 'theme' && original === GLASS_THEME_NAME) {
+                            original = FALLBACK_THEME_NAME
+                        }
                         if (original === undefined) {
                             if (spec.section) {
                                 delete (config as any)._store[spec.section][spec.key]
@@ -278,8 +283,15 @@ class GlassConfigProvider extends ConfigProvider {
                         () => console.log('[glass] disableTheme: save done'),
                         e => console.log('[glass] disableTheme: SAVE REJECT', e),
                     )
-                    // theme 还原后 changed$ 驱动 ThemesService 重新应用用户主题 CSS;
-                    // glass-vars (壁纸变量) 由 applyGlassVars 按 isThemeEnabled 清空
+                    // 主动驱动主题 CSS 卸载: 不等 changed$ 间接链, 直接让 ThemesService
+                    // 以还原后的 appearance.theme 重应用 (Glass CSS 立即被替换为用户主题)
+                    try {
+                        const themes: any = injector.get(ThemesService)
+                        themes?.applyCurrentTheme?.()
+                        console.log('[glass] disableTheme: applyCurrentTheme done')
+                    } catch (e) {
+                        console.log('[glass] disableTheme: applyCurrentTheme skip', e)
+                    }
                 }
 
                 // 锁定徽标: 在宿主设置页 (设置 → Window) 被锁项的标题旁注入 🔒
