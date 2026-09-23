@@ -1,4 +1,4 @@
-import { NgModule, Injectable, Injector, ApplicationRef } from '@angular/core'
+import { NgModule, Injectable, Injector, ApplicationRef, NgZone } from '@angular/core'
 import { Theme, ConfigProvider, ConfigService, HostWindowService, HotkeysService, HotkeyProvider, HotkeyDescription } from 'tabby-core'
 import { TerminalColorSchemeProvider } from 'tabby-terminal'
 import { SettingsTabProvider } from 'tabby-settings'
@@ -293,17 +293,42 @@ class GlassConfigProvider extends ConfigProvider {
                     })
                 }
                 let lockBadgeObserver: MutationObserver|null = null
+                let badgeObserverTimer: any = null
                 const startLockBadgeObserver = () => {
                     if (lockBadgeObserver) { return }
-                    lockBadgeObserver = new MutationObserver(() => {
-                        // settings-tab 不在 DOM 时短路, 避免终端输出的高频 DOM 突变空转注入逻辑
-                        if (!document.querySelector('settings-tab')) { return }
+                    // 关键: observer 及其回调必须在 Angular zone 之外 ——
+                    // 若在 zone 内, 设置页每次 CD 的 DOM 变化 → observer 回调(zone 任务)
+                    // → onInvokeTask 触发 tick → tick 再改 DOM → observer …… CD 与 observer
+                    // 无限共振, 主线程微任务饥饿 (Hotkeys 页卡死 + save() 永不 resolve 的根因)
+                    let zone: any
+                    try { zone = injector.get(NgZone) } catch { zone = null }
+                    const scheduleInject = () => {
+                        // 双保险: 节流 (200ms trailing), 高频 DOM 变化下每拍最多注入一次
+                        if (badgeObserverTimer !== null) { return }
+                        badgeObserverTimer = setTimeout(() => {
+                            badgeObserverTimer = null
+                            // settings-tab 不在 DOM 时短路, 避免终端输出的高频 DOM 突变空转
+                            if (!document.querySelector('settings-tab')) { return }
+                            injectLockBadges()
+                        }, 200)
+                    }
+                    const start = () => {
+                        if (lockBadgeObserver) { return }
+                        lockBadgeObserver = new MutationObserver(scheduleInject)
+                        lockBadgeObserver.observe(document.body, { childList: true, subtree: true })
                         injectLockBadges()
-                    })
-                    lockBadgeObserver.observe(document.body, { childList: true, subtree: true })
-                    injectLockBadges()
+                    }
+                    if (zone?.runOutsideAngular) {
+                        zone.runOutsideAngular(start)
+                    } else {
+                        start()
+                    }
                 }
                 const stopLockBadgeObserver = () => {
+                    if (badgeObserverTimer !== null) {
+                        clearTimeout(badgeObserverTimer)
+                        badgeObserverTimer = null
+                    }
                     lockBadgeObserver?.disconnect()
                     lockBadgeObserver = null
                     document.querySelectorAll('.glass-lock-badge').forEach(el => el.remove())
