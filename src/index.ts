@@ -247,6 +247,15 @@ class GlassConfigProvider extends ConfigProvider {
                         () => console.log('[glass] enableTheme: save done'),
                         e => console.log('[glass] enableTheme: SAVE REJECT', e),
                     )
+                    // 主动驱动主题应用 (与 disable 对称): 直接让 ThemesService 以
+                    // appearance.theme=Glass 重写 style#theme, 不依赖 changed$ 间接链
+                    try {
+                        const themes: any = injector.get(ThemesService)
+                        themes?.applyCurrentTheme?.()
+                        console.log('[glass] enableTheme: applyCurrentTheme done')
+                    } catch (e) {
+                        console.log('[glass] enableTheme: applyCurrentTheme skip', e)
+                    }
                 }
 
                 // 关闭: 按快照还原 (undefined → 删除键恢复"未设置"态), 清除 CSS 旁路与视觉状态
