@@ -239,6 +239,7 @@ class GlassConfigProvider extends ConfigProvider {
                     }
                     config.store.glass.lockBackup = backup
                     config.store.glass.themeEnabled = true
+                    console.log('[glass] enableTheme: snapshot theme=' + backup['appearance.theme'] + ' keys=' + Object.keys(backup).length)
                     // OS 窗口不透明度是进程级副作用, setOpacity 定义在 tabby-electron 实现层
                     const hostWindow = injector.get(HostWindowService) as any
                     hostWindow.setOpacity?.(0.93)
@@ -252,6 +253,9 @@ class GlassConfigProvider extends ConfigProvider {
                 const disableTheme = () => {
                     console.log('[glass] disableTheme: start')
                     const backup: any = (config as any)._store?.glass?.lockBackup ?? {}
+                    if (!backup || Object.keys(backup).length === 0) {
+                        console.log('[glass] disableTheme: EMPTY BACKUP (快照缺失, 无法还原 theme/迁移键)')
+                    }
                     for (const spec of OVERRIDES) {
                         const id = (spec.section ?? '_') + '.' + spec.key
                         const original = backup[id]
