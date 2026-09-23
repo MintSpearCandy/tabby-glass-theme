@@ -226,6 +226,7 @@ class GlassConfigProvider extends ConfigProvider {
                 // 开启: 快照用户世界 (theme 原值若已是 Glass → 映射默认主题, 保证"关"能退出 Glass)
                 //       → 全量写 Glass 世界值 → 快照持久化
                 const enableTheme = () => {
+                    console.log('[glass] enableTheme: start')
                     const backup: any = {}
                     for (const spec of OVERRIDES) {
                         const id = (spec.section ?? '_') + '.' + spec.key
@@ -241,11 +242,15 @@ class GlassConfigProvider extends ConfigProvider {
                     // OS 窗口不透明度是进程级副作用, setOpacity 定义在 tabby-electron 实现层
                     const hostWindow = injector.get(HostWindowService) as any
                     hostWindow.setOpacity?.(0.93)
-                    config.save()
+                    config.save().then(
+                        () => console.log('[glass] enableTheme: save done'),
+                        e => console.log('[glass] enableTheme: SAVE REJECT', e),
+                    )
                 }
 
                 // 关闭: 按快照还原 (undefined → 删除键恢复"未设置"态), 清除 CSS 旁路与视觉状态
                 const disableTheme = () => {
+                    console.log('[glass] disableTheme: start')
                     const backup: any = (config as any)._store?.glass?.lockBackup ?? {}
                     for (const spec of OVERRIDES) {
                         const id = (spec.section ?? '_') + '.' + spec.key
@@ -265,7 +270,10 @@ class GlassConfigProvider extends ConfigProvider {
                     const userOpacity = typeof backup['appearance.opacity'] === 'number' ? backup['appearance.opacity'] : 1
                     const hostWindow = injector.get(HostWindowService) as any
                     hostWindow.setOpacity?.(userOpacity)
-                    config.save()
+                    config.save().then(
+                        () => console.log('[glass] disableTheme: save done'),
+                        e => console.log('[glass] disableTheme: SAVE REJECT', e),
+                    )
                     // theme 还原后 changed$ 驱动 ThemesService 重新应用用户主题 CSS;
                     // glass-vars (壁纸变量) 由 applyGlassVars 按 isThemeEnabled 清空
                 }
@@ -329,6 +337,7 @@ class GlassConfigProvider extends ConfigProvider {
                 //  - 开关开 + 无快照 → 首次接管 (建快照, 补齐 Glass 值)
                 //  - 开关关 + 有快照 → 上次未正常关闭 (崩溃/强杀) → 自愈还原
                 //  - 开关开 + 有快照 → 状态已在配置中, 仅对齐视觉状态
+                console.log('[glass] init: themeEnabled=' + isThemeEnabled() + ' hasBackup=' + hasBackup())
                 if (isThemeEnabled() && !hasBackup()) {
                     enableTheme()
                 }
@@ -353,12 +362,16 @@ class GlassConfigProvider extends ConfigProvider {
                         let drifted = false
                         for (const spec of OVERRIDES) {
                             if (spec.guarded && !sameValue(storeValue(spec), spec.value)) {
+                                console.log('[glass] guard drift: ' + (spec.section ?? '_') + '.' + spec.key + ' -> ' + JSON.stringify(spec.value))
                                 writeValue(spec, spec.value)
                                 drifted = true
                             }
                         }
                         if (drifted) {
-                            config.save()
+                            config.save().then(
+                                () => console.log('[glass] guard: save done'),
+                                e => console.log('[glass] guard: SAVE REJECT', e),
+                            )
                         }
                         setEnabledVisualState(true)
                     }
