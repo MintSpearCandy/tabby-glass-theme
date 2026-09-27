@@ -65,11 +65,14 @@ window-controls button svg{fill:#f1f1f1;fill-opacity:.9}
 settings-tab .header .title .glass-lock-badge{font-size:.7em;opacity:.55}
 .glass-settings .form-line{padding:.55rem .1rem;margin:0}
 .glass-settings .form-line+.form-line{border-top:1px solid rgba(255,255,255,.06)}
-.glass-settings .header .title{font-weight:500;font-size:.8rem;margin-bottom:2px}
+.glass-settings .header .title{display:flex;align-items:baseline;gap:8px;font-weight:500;font-size:.8rem;margin-bottom:2px;white-space:nowrap}
+.glass-settings .header .title .glass-value{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:400;color:var(--bs-secondary-color,rgba(241,241,241,.64))}
 .glass-settings .header .description{font-size:.7rem;line-height:1.5;color:var(--bs-secondary-color,rgba(241,241,241,.64));margin-bottom:.45rem}
+.glass-settings .form-check-label{white-space:nowrap}
 .glass-settings .form-range{margin:0}
-.glass-settings-inline-switch{margin-top:.5rem;margin-bottom:.1rem}
-.glass-settings-kbd{font-size:.65rem;margin-left:8px;opacity:.7}
+.glass-settings-inline-switch{display:flex;align-items:center;gap:6px;margin-top:.5rem;margin-bottom:.1rem}
+.glass-settings-inline-switch .form-check-input{float:none;margin-left:0;flex:none}
+.glass-settings-kbd{font-size:.65rem;opacity:.7;white-space:nowrap}
 .glass-settings-actions{margin-top:.4rem}
 
 /*

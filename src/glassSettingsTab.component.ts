@@ -63,7 +63,7 @@ import { ConfigService } from 'tabby-core'
 
             <div class="form-line">
                 <div class="header">
-                    <div class="title">图片不透明度: {{ glass.wallpaperOpacity ?? 0.7 }}</div>
+                    <div class="title"><span>图片不透明度</span><span class="glass-value">{{ glass.wallpaperOpacity ?? 0.7 }}</span></div>
                     <div class="description">壁纸与深色底的混合强度, 越低壁纸越暗</div>
                 </div>
                 <input
@@ -79,7 +79,7 @@ import { ConfigService } from 'tabby-core'
 
             <div class="form-line">
                 <div class="header">
-                    <div class="title">顶部遮罩: {{ glass.overlayTop ?? 0.5 }}</div>
+                    <div class="title"><span>顶部遮罩</span><span class="glass-value">{{ glass.overlayTop ?? 0.5 }}</span></div>
                     <div class="description">窗口顶部 (标签栏一侧) 的暗化程度</div>
                 </div>
                 <input
@@ -95,7 +95,7 @@ import { ConfigService } from 'tabby-core'
 
             <div class="form-line">
                 <div class="header">
-                    <div class="title">底部遮罩: {{ glass.overlayBottom ?? 0.78 }}</div>
+                    <div class="title"><span>底部遮罩</span><span class="glass-value">{{ glass.overlayBottom ?? 0.78 }}</span></div>
                     <div class="description">窗口底部的暗化程度, 增强终端文字可读性</div>
                 </div>
                 <input
