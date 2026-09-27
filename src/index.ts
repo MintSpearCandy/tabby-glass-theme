@@ -1,5 +1,5 @@
 import { NgModule, Injectable, Injector, ApplicationRef, NgZone } from '@angular/core'
-import { Theme, ConfigProvider, ConfigService, HostWindowService, HotkeysService, HotkeyProvider, HotkeyDescription, ThemesService } from 'tabby-core'
+import { Theme, ConfigProvider, ConfigService, HostWindowService, HotkeysService, HotkeyProvider, HotkeyDescription, ThemesService, BOOTSTRAP_DATA } from 'tabby-core'
 import { TerminalColorSchemeProvider } from 'tabby-terminal'
 import { SettingsTabProvider } from 'tabby-settings'
 
@@ -98,7 +98,7 @@ class GlassConfigProvider extends ConfigProvider {
             'glass-toggle-wallpaper': ['Ctrl-Alt-B'],
         },
         glass: {
-            wallpaper: 'D:/App/Tabby/data/resources/ac041_void棺材胡桃4k.jpg',
+            wallpaper: '',
             wallpaperEnabled: true,
             wallpaperOpacity: 0.7,
             overlayTop: 0.5,
@@ -121,6 +121,24 @@ class GlassConfigProvider extends ConfigProvider {
                 // 必须用自有 <style> 元素而非 documentElement inline style:
                 // ThemesService.applyThemeVariables 会在每次 config.changed$ 时把
                 // inline style 整体恢复为引导期备份, 后设的变量会被静默抹掉.
+                // 壁纸默认路径: <userData>/resources/background.jpg (BOOTSTRAP_DATA.userPluginsPath 推导,
+                // 便携安装 = <Tabby>/data/resources/background.jpg; 不存在该文件时 url() 自然不渲染)
+                let cachedDataDir: string|null = null
+                const defaultWallpaper = (): string => {
+                    if (cachedDataDir !== null) { return cachedDataDir + '/resources/background.jpg' }
+                    try {
+                        const bp: any = injector.get(BOOTSTRAP_DATA)
+                        const p: string|undefined = bp?.userPluginsPath
+                        if (typeof p === 'string' && p.length > 0) {
+                            cachedDataDir = p.replace(/[\\/](plugins|node_modules)([\\/].*)?$/i, '').replace(/\\/g, '/')
+                            return cachedDataDir + '/resources/background.jpg'
+                        }
+                    } catch { /* BOOTSTRAP_DATA 不可用时回退空串 (无壁纸) */ }
+                    cachedDataDir = ''
+                    return ''
+                }
+                ;(window as any).__glassDefaultWallpaper = defaultWallpaper
+
                 const applyGlassVars = () => {
                     const styleEl0 = document.querySelector('style#glass-vars') as HTMLStyleElement | null
                     // 总开关关闭时清空壁纸变量 (Glass 世界的 CSS 旁路一并撤离)
@@ -135,7 +153,8 @@ class GlassConfigProvider extends ConfigProvider {
                         styleEl.id = 'glass-vars'
                         document.head.appendChild(styleEl)
                     }
-                    const wp: string = g.wallpaper ?? ''
+                    // 留空 = 默认图 (data/resources/background.jpg); 显式路径优先
+                    const wp: string = g.wallpaper || defaultWallpaper()
                     const enabled = g.wallpaperEnabled !== false
                     let imageValue = 'none'
                     if (wp && enabled) {

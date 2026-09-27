@@ -7,78 +7,65 @@ import { ConfigService } from 'tabby-core'
  */
 @Component({
     template: `
-        <div class="content-box">
+        <div class="content-box glass-settings">
             <h3>Glass Theme</h3>
 
-            <div class="form-check form-switch">
-                <input
-                    class="form-check-input"
-                    type="checkbox"
-                    role="switch"
-                    id="glassThemeEnabled"
-                    [checked]="glass.themeEnabled !== false"
-                    (change)="setThemeEnabled($event)"
-                >
-                <label class="form-check-label" for="glassThemeEnabled">
-                    启用 Glass 主题 (Theme 注入总开关)
-                </label>
-                <div class="glass-lock-note">
-                    <small class="text-muted" *ngIf="glass.themeEnabled !== false; else themeOffHint">
-                        Glass CSS 与以下设置接管中; 被锁项在 设置 → Window 页显示
-                        <i class="fas fa-lock glass-lock-badge"></i> 标记。
-                        <strong>关闭开关将完整还原您的原主题与全部配置</strong> (含字体/配色等迁移项):
-                    </small>
-                    <ng-template #themeOffHint>
-                        <small class="text-muted">
-                            主题注入已关闭 —— 您自己的主题与配置已还原 (Glass 未修改任何您的原始值,
-                            快照保存在 glass.lockBackup)。重新打开即恢复玻璃主题接管
-                        </small>
-                    </ng-template>
-                    <ul class="glass-lock-list" *ngIf="glass.themeEnabled !== false">
-                        <li><i class="fas fa-lock glass-lock-badge"></i> 外观主题 → Glass</li>
-                        <li><i class="fas fa-lock glass-lock-badge"></i> 标签页位置 → 顶部</li>
-                        <li><i class="fas fa-lock glass-lock-badge"></i> 窗口边框 → 细边框 (Thin)</li>
-                        <li><i class="fas fa-lock glass-lock-badge"></i> 窗口不透明度 → 0.93</li>
-                        <li><i class="fas fa-lock glass-lock-badge"></i> 亚克力背景 (Vibrancy) → 关闭</li>
-                        <li><i class="fas fa-lock glass-lock-badge"></i> 终端背景 → 跟随主题</li>
-                        <li><i class="fas fa-lock glass-lock-badge"></i> 停靠终端 → 关闭</li>
-                        <li><i class="fas fa-lock glass-lock-badge"></i> 配置文件侧栏 → 关闭</li>
-                        <li><i class="fas fa-lock glass-lock-badge"></i> 标签页宽度 → 固定 (非弹性)</li>
-                        <li><i class="fas fa-lock glass-lock-badge"></i> 终端字体/配色/前端 → Glass 预设</li>
-                    </ul>
+            <div class="form-line">
+                <div class="form-check form-switch">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        role="switch"
+                        id="glassThemeEnabled"
+                        [checked]="glass.themeEnabled !== false"
+                        (change)="setThemeEnabled($event)"
+                    >
+                    <label class="form-check-label" for="glassThemeEnabled">启用主题</label>
+                </div>
+                <div class="header">
+                    <div class="description">
+                        Theme 注入总开关。关闭后完整还原您原本的主题与全部设置 (原值快照保存在 glass.lockBackup)。
+                    </div>
+                    <div class="description" *ngIf="glass.themeEnabled !== false">
+                        接管中: 标签位置 / 窗口边框 / 不透明度 0.93 / 亚克力 / 终端背景 / 停靠 / 侧栏 / 标签宽度 / 终端字体与配色
+                        —— 被锁项在 设置 → Window 页显示 <i class="fas fa-lock glass-lock-badge"></i>
+                    </div>
                 </div>
             </div>
 
-            <div class="form-check form-switch">
-                <input
-                    class="form-check-input"
-                    type="checkbox"
-                    role="switch"
-                    id="glassWallpaperEnabled"
-                    [checked]="glass.wallpaperEnabled !== false"
-                    (change)="setEnabled($event)"
-                >
-                <label class="form-check-label" for="glassWallpaperEnabled">
-                    启用背景图 (Ctrl-Alt-B 快捷切换)
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label>背景图 (Background image)</label>
+            <div class="form-line">
+                <div class="header">
+                    <div class="title">背景图</div>
+                    <div class="description">
+                        留空使用默认图片; 支持 http(s):// 或 file:/// URL 与本地绝对路径
+                    </div>
+                </div>
                 <input
                     type="text"
                     class="form-control"
                     [value]="glass.wallpaper ?? ''"
                     (change)="setWallpaper($event)"
-                    placeholder="本地绝对路径或 http(s):///file:/// URL, 留空为纯色底"
+                    [placeholder]="defaultWallpaper"
                 >
-                <small class="text-muted">
-                    本地绝对路径 (D:\\path\\wallpaper.jpg) 或 http(s)/file:/// URL; 留空则不加载壁纸
-                </small>
+                <div class="form-check form-switch glass-settings-inline-switch">
+                    <input
+                        class="form-check-input"
+                        type="checkbox"
+                        role="switch"
+                        id="glassWallpaperEnabled"
+                        [checked]="glass.wallpaperEnabled !== false"
+                        (change)="setEnabled($event)"
+                    >
+                    <label class="form-check-label" for="glassWallpaperEnabled">显示背景图</label>
+                    <span class="text-muted glass-settings-kbd">Ctrl+Alt+B</span>
+                </div>
             </div>
 
-            <div class="form-group">
-                <label>壁纸不透明度 (Wallpaper opacity): {{ glass.wallpaperOpacity ?? 0.7 }}</label>
+            <div class="form-line">
+                <div class="header">
+                    <div class="title">图片不透明度: {{ glass.wallpaperOpacity ?? 0.7 }}</div>
+                    <div class="description">壁纸与深色底的混合强度, 越低壁纸越暗</div>
+                </div>
                 <input
                     type="range"
                     class="form-range"
@@ -90,8 +77,11 @@ import { ConfigService } from 'tabby-core'
                 >
             </div>
 
-            <div class="form-group">
-                <label>顶部遮罩暗度 (Overlay top): {{ glass.overlayTop ?? 0.5 }}</label>
+            <div class="form-line">
+                <div class="header">
+                    <div class="title">顶部遮罩: {{ glass.overlayTop ?? 0.5 }}</div>
+                    <div class="description">窗口顶部 (标签栏一侧) 的暗化程度</div>
+                </div>
                 <input
                     type="range"
                     class="form-range"
@@ -103,8 +93,11 @@ import { ConfigService } from 'tabby-core'
                 >
             </div>
 
-            <div class="form-group">
-                <label>底部遮罩暗度 (Overlay bottom): {{ glass.overlayBottom ?? 0.78 }}</label>
+            <div class="form-line">
+                <div class="header">
+                    <div class="title">底部遮罩: {{ glass.overlayBottom ?? 0.78 }}</div>
+                    <div class="description">窗口底部的暗化程度, 增强终端文字可读性</div>
+                </div>
                 <input
                     type="range"
                     class="form-range"
@@ -116,7 +109,7 @@ import { ConfigService } from 'tabby-core'
                 >
             </div>
 
-            <div class="form-group">
+            <div class="form-line glass-settings-actions">
                 <button class="btn btn-secondary" (click)="resetDefaults()">恢复默认值</button>
             </div>
         </div>
@@ -131,6 +124,11 @@ export class GlassSettingsTabComponent {
 
     get glass (): any {
         return this.config.store.glass
+    }
+
+    /** 壁纸默认路径: <userData>/resources/background.jpg (引擎侧同源回退, 见 index.ts) */
+    get defaultWallpaper (): string {
+        return (window as any).__glassDefaultWallpaper?.() ?? ''
     }
 
     setEnabled (event: Event): void {
