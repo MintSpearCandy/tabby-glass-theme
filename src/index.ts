@@ -41,7 +41,7 @@ class GlassTheme extends Theme {
  */
 const IR_BLACK: TerminalColorScheme = {
     name: 'IR_Black',
-    foreground: '#f1f1f1',
+    foreground: '#f8f8f8',
     background: '#000000',
     cursor: '#808080',
     cursorAccent: '#000000',

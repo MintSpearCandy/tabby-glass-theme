@@ -85,3 +85,19 @@ a:hover{color: #fff}
 .btn-outline-primary{--bs-btn-color: rgba(255, 255, 255, 0.88)}
 .text-primary{color: rgba(255, 255, 255, 0.88) !important}
 .glass-lock-badge{color: rgba(255, 255, 255, 0.7)}
+
+/*
+ * [字色提亮 2026-09-27] 全体文字提亮一档:
+ * 主字色 #f1f1f1 → #fafafa; 次要 0.64 → 0.75, 三级 0.42 → 0.55 (基色改纯白);
+ * 暗淡元素 (未激活 tab/工具栏图标/占位符) #8a8a8a → #a8a8ab, 悬停 #d6d6d6 → #e6e6e8.
+ */
+:root{--bs-body-color:#fafafa;--bs-body-color-rgb:250,250,250;--bs-secondary-color:rgba(255,255,255,.75);--bs-secondary-color-rgb:255,255,255;--bs-tertiary-color:rgba(255,255,255,.55);--bs-tertiary-color-rgb:255,255,255}
+body{color:#fafafa}
+.form-control::placeholder{color:#a6a6ab;opacity:1}
+.btn-secondary{--bs-btn-color:#fafafa;--bs-btn-hover-color:#fff}
+app-root .main.content .tab-bar .tabs tab-header{color:#a8a8ab}
+app-root .main.content .tab-bar .tabs tab-header:hover{color:#e6e6e8}
+app-root .main.content .tab-bar .btn-tab-bar{color:#a8a8ab}
+app-root .main.content .tab-bar .btn-tab-bar:hover{color:#e6e6e8}
+app-root .main.content .tab-bar .btn-tab-bar svg,app-root .main.content .tab-bar .btn-tab-bar path{fill:#a8a8ab;fill-opacity:.95}
+app-root .main.content .tab-bar .btn-tab-bar:hover svg,app-root .main.content .tab-bar .btn-tab-bar:hover path{fill:#e6e6e8}
