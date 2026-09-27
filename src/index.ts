@@ -254,7 +254,11 @@ class GlassConfigProvider extends ConfigProvider {
                             current = FALLBACK_THEME_NAME
                         }
                         backup[id] = current
-                        writeValue(spec, spec.value)
+                        // 守约组强制写锁定值; 迁移组仅"补默认" —— 用户有显式值
+                        // (含上次 Glass 期间保留的修改)时尊重用户, 不覆盖
+                        if (spec.guarded || current === undefined) {
+                            writeValue(spec, spec.value)
+                        }
                     }
                     config.store.glass.lockBackup = backup
                     config.store.glass.themeEnabled = true
@@ -287,6 +291,13 @@ class GlassConfigProvider extends ConfigProvider {
                     for (const spec of OVERRIDES) {
                         const id = (spec.section ?? '_') + '.' + spec.key
                         let original = backup[id]
+                        // 迁移组条件还原: 开启期间被用户改过的键 (当前值 ≠ Glass 迁移值)
+                        // 保留用户的修改 —— 关闭不能吞掉用户在 Glass 世界里做的调整
+                        // (如改过的字体/配色); 守约组不受此影响 (守约本身保证值未被改).
+                        if (!spec.guarded && !sameValue(rawValue(spec), spec.value)) {
+                            console.log('[glass] disableTheme: keep user-modified ' + id)
+                            continue
+                        }
                         // 兜底映射: 快照里 theme 若是未映射的 Glass (任何历史路径造成),
                         // 还原目标强制改为默认主题 —— 保证关闭后 Glass CSS 一定卸载
                         if (spec.key === 'theme' && original === GLASS_THEME_NAME) {
