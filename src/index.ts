@@ -106,6 +106,8 @@ class GlassConfigProvider extends ConfigProvider {
             themeEnabled: true,
             // __nonStructural: 允许整对象赋值经 proxy 写入 _store (结构性子对象只有 getter)
             lockBackup: { __nonStructural: true },
+            // 用户配色的原生 background 持久备份 (背景透明接管的还原依据)
+            userSchemeBg: { __nonStructural: true },
         },
     }
 
@@ -306,15 +308,31 @@ class GlassConfigProvider extends ConfigProvider {
                     const backup: any = {}
                     for (const spec of OVERRIDES) {
                         const id = (spec.section ?? '_') + '.' + spec.key
-                        const current = rawValue(spec)
-                        backup[id] = current
+                        let current = rawValue(spec)
                         // 守约组强制写锁定值; 迁移组仅"补默认" —— 用户有显式值
                         // (含上次 Glass 期间保留的修改)时尊重用户, 不覆盖.
                         // colorScheme 例外: 字段级背景接管 —— 用户配色仅 background 置透明,
                         // 其余 (name/前景/16色) 原样保留, 快照存完整原对象.
                         if (spec.key === 'colorScheme') {
+                            // 残留防御: 若当前 background 是透明 (上次"换过配色"路径留下的),
+                            // 用持久保存的原生色值 (glass.userSchemeBg) 修复后再快照/接管,
+                            // 防止透明值在多次开关循环中被固化进快照
+                            if (isPlainObject(current) && current.background === TRANSPARENT_BG) {
+                                const saved = (config as any)._store?.glass?.userSchemeBg
+                                if (saved && saved.name === current.name && typeof saved.background === 'string' && saved.background !== TRANSPARENT_BG) {
+                                    current = { ...current, background: saved.background }
+                                    console.log('[glass] enableTheme: restore native scheme bg ' + saved.background)
+                                }
+                            }
+                            if (isPlainObject(current) && current.background !== TRANSPARENT_BG) {
+                                config.store.glass.userSchemeBg = { name: current.name, background: current.background }
+                            }
+                            backup[id] = current
                             writeValue(spec, isPlainObject(current) ? withTransparentBg(current) : spec.value)
-                        } else if (spec.guarded || current === undefined) {
+                            continue
+                        }
+                        backup[id] = current
+                        if (spec.guarded || current === undefined) {
                             writeValue(spec, spec.value)
                         }
                     }
@@ -341,15 +359,21 @@ class GlassConfigProvider extends ConfigProvider {
                     for (const spec of OVERRIDES) {
                         const id = (spec.section ?? '_') + '.' + spec.key
                         const original = backup[id]
-                        // colorScheme 还原: 未换配色 (除 background 外一致) → 完整还原快照
-                        // (用户的原 background 色值一并还原); 换过配色 → 保留新选择
-                        // (透明 background 随行 —— 关闭态透明在默认主题深底上视觉正常)
+                        // colorScheme 还原独立完成 (禁止落入下方通用迁移分支 —— 通用分支以
+                        // IR_BLACK 为比较基准, 会把"用户原配色+透明背景"误判为用户改过而跳过还原,
+                        // 导致透明 background 残留到关闭态 = 配色混乱):
+                        //   未换配色 (除 background 外与快照一致) → 完整还原快照 (原生 background 色值);
+                        //   换过配色 → 保留用户的新选择 (透明 background 随行, 关闭态深底上视觉正常)
                         if (spec.key === 'colorScheme') {
                             const cur = rawValue(spec)
                             if (isPlainObject(original) && isPlainObject(cur) && !sameSchemeIgnoringBg(cur, original)) {
                                 console.log('[glass] disableTheme: keep user-switched colorScheme')
-                                continue
+                            } else if (original === undefined) {
+                                delete (config as any)._store.terminal.colorScheme
+                            } else {
+                                writeValue(spec, original)
                             }
+                            continue
                         }
                         // 迁移组条件还原: 开启期间被用户改过的键 (当前值 ≠ Glass 迁移值)
                         // 保留用户的修改 —— 关闭不能吞掉用户在 Glass 世界里做的调整
@@ -507,12 +531,14 @@ class GlassConfigProvider extends ConfigProvider {
                         }
                         // 终端背景字段级守约: 开启期间任何来源写入的 colorScheme (用户切换配色/
                         // 恢复默认等) 其 background 一律保持透明 —— 不 save, 由触发本次
-                        // changed$ 的那条链自然落盘
+                        // changed$ 的那条链自然落盘. 透明化前先把该配色的原生 background
+                        // 记入 glass.userSchemeBg (下次开启的固化修复与关闭还原都依赖它)
                         {
                             const csSpec = OVERRIDES.find(o => o.key === 'colorScheme')!
                             const cs = rawValue(csSpec)
                             if (isPlainObject(cs) && cs.background !== TRANSPARENT_BG) {
                                 console.log('[glass] guard: colorScheme.background -> transparent')
+                                config.store.glass.userSchemeBg = { name: cs.name, background: cs.background }
                                 writeValue(csSpec, withTransparentBg(cs))
                             }
                         }
