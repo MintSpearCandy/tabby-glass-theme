@@ -1,11 +1,10 @@
 import { NgModule, Injectable, Injector } from '@angular/core'
-import { Theme, ConfigProvider, ConfigService, HostWindowService, HotkeysService, HotkeyProvider, HotkeyDescription } from 'tabby-core'
+import { Theme, ConfigProvider, ConfigService, HotkeysService, HotkeyProvider, HotkeyDescription, BOOTSTRAP_DATA } from 'tabby-core'
 import { TerminalColorSchemeProvider } from 'tabby-terminal'
 import { SettingsTabProvider } from 'tabby-settings'
 
 import { GlassSettingsTabProvider } from './glassSettings'
 import { GlassSettingsTabComponent } from './glassSettingsTab.component'
-import { GlassSwitchEngine, OverrideSpec, TRANSPARENT_BG } from './engine'
 
 // npm 发布的 tabby-core typings 缺少此接口导出 (本地源码有), 本地定义 (仅编译期)
 interface TerminalColorScheme {
@@ -20,23 +19,25 @@ interface TerminalColorScheme {
 }
 
 /**
- * 深色玻璃质感主题 (方案 B: 窗口内 CSS 合成)
+ * 深色玻璃质感主题 —— 常规 Tabby 主题 (设置 → 外观 → 主题 选择 Glass).
+ * 不接管/锁定/回撤任何宿主配置; 终端透明走原生 Theme.terminalBackground,
+ * 主题 CSS/变量全部由 ThemesService 原生链路管理.
  */
 @Injectable()
 class GlassTheme extends Theme {
     name = 'Glass'
     css = require('./theme.scss')
+    // 终端视口全透明, 露出主题 CSS 的壁纸+渐变图层 (xterm allowTransparency 恒开)
     terminalBackground = '#00000000'
 }
 
 /**
- * IR_Black 配色方案 (wezterm colors.lua 同源)
- * 背景带 alpha → xterm canvas 透明, 壁纸透出 (字段级接管详见 engine.ts)
+ * IR_Black 配色方案 (wezterm colors.lua 同源), 作为常规注册配色供用户选择.
  */
 const IR_BLACK: TerminalColorScheme = {
     name: 'IR_Black',
     foreground: '#f8f8f8',
-    background: TRANSPARENT_BG,
+    background: '#000000',
     cursor: '#808080',
     cursorAccent: '#000000',
     selection: 'rgba(255, 255, 255, 0.15)',
@@ -67,8 +68,10 @@ class GlassHotkeyProvider extends HotkeyProvider {
 }
 
 /**
- * 配置提供者: 只声明 defaults (glass 段的键才有 proxy 访问器);
- * 接管/还原逻辑全部在 GlassSwitchEngine (engine.ts), 此处仅做接线.
+ * 配置提供者: defaults 只声明 glass 段键; ready$ 后做两件事:
+ *  1. 旧"总开关"方案 (v0.3.x 配置接管) 的一次性清理迁移 —— 按快照还原被接管的
+ *     配置, 移除所有接管标记键, 幂等;
+ *  2. 壁纸 CSS 变量旁路注入 (自有 <style id="glass-vars">, 不碰宿主任何链路).
  */
 @Injectable()
 class GlassConfigProvider extends ConfigProvider {
@@ -82,10 +85,6 @@ class GlassConfigProvider extends ConfigProvider {
             wallpaperOpacity: 0.7,
             overlayTop: 0.5,
             overlayBottom: 0.78,
-            themeEnabled: true,
-            // __nonStructural: 允许整对象赋值经 proxy 写入 _store (结构性子对象只有 getter)
-            lockBackup: { __nonStructural: true },
-            userSchemeBg: { __nonStructural: true },
         },
     }
 
@@ -96,38 +95,92 @@ class GlassConfigProvider extends ConfigProvider {
         setTimeout(() => {
             const config = injector.get(ConfigService)
             config.ready$.subscribe(() => {
-                // 锁定/迁移表 (IR_BLACK 为 colorScheme 的接管默认值)
-                const overrides: OverrideSpec[] = [
-                    // 守约组: 与玻璃显示直接冲突的项 (开启期间锁定)
-                    { section: 'appearance', key: 'tabsLocation', value: 'top', guarded: true },
-                    { section: 'appearance', key: 'frame', value: 'thin', guarded: true },
-                    { section: 'appearance', key: 'flexTabs', value: false, guarded: true },
-                    { section: 'appearance', key: 'opacity', value: 0.93, guarded: true },
-                    { section: 'appearance', key: 'vibrancy', value: false, guarded: true },
-                    { section: 'appearance', key: 'dock', value: 'off', guarded: true },
-                    { section: 'terminal', key: 'background', value: 'colorScheme', guarded: true },
-                    { section: null, key: 'showProfileTree', value: false, guarded: true },
-                    // 迁移组: 开启时补默认 (用户显式值优先), 关闭时按快照还原
-                    { section: 'terminal', key: 'colorScheme', value: { __nonStructural: true, ...IR_BLACK } },
-                    { section: 'terminal', key: 'font', value: 'Cascadia Code' },
-                    { section: 'terminal', key: 'fallbackFont', value: 'JetBrainsMono NF' },
-                    { section: 'terminal', key: 'frontend', value: 'xterm' },
-                    { section: 'terminal', key: 'showTabProfileIcon', value: true },
-                    { section: 'terminal', key: 'hideTabIndex', value: true },
-                ]
+                const raw = (config as any)._store
 
-                const engine = new GlassSwitchEngine(injector)
-                engine.overrides = overrides
-                engine.boot()
-                config.changed$.subscribe(() => engine.onConfigChanged())
+                // ---- 一次性清理: 旧总开关方案的接管残留 (幂等) ----
+                const backup = raw?.glass?.lockBackup
+                if (backup && Object.keys(backup).length > 0) {
+                    // 按快照还原被接管键 (undefined → 删键 = "未设置"态)
+                    for (const id of Object.keys(backup)) {
+                        const [section, key] = id.split('.')
+                        const original = backup[id]
+                        try {
+                            if (original === undefined) {
+                                if (section === '_') { delete raw[key] } else if (raw[section]) { delete raw[section][key] }
+                            } else if (section === '_') {
+                                ;(config.store as any)[key] = original
+                            } else if (raw[section]) {
+                                config.store[section][key] = original
+                            }
+                        } catch (e) {
+                            console.log('[glass] cleanup skip ' + id, e)
+                        }
+                    }
+                }
+                // colorScheme 若残留透明背景 (接管期写入), 恢复为常规不透明黑
+                const cs = raw?.terminal?.colorScheme
+                if (cs && typeof cs.background === 'string' && /,\s*0\)$|00000000$|^transparent$/i.test(cs.background)) {
+                    console.log('[glass] cleanup: restore opaque scheme background')
+                    config.store.terminal.colorScheme = { __nonStructural: true, ...cs, background: '#000000' }
+                }
+                // 移除接管标记键 (defaults 已无声明, 残留仅为 yaml 数据)
+                if (raw?.glass) {
+                    delete raw.glass.themeEnabled
+                    delete raw.glass.lockBackup
+                    delete raw.glass.userSchemeBg
+                }
 
-                // 诊断接口: Console 可直测 save()/刷新变量/切换总开关/默认壁纸路径
+                // ---- 壁纸 CSS 变量旁路 (本主题唯一的运行时注入) ----
+                let cachedDataDir: string | null = null
+                const defaultWallpaper = (): string => {
+                    if (cachedDataDir !== null) { return cachedDataDir + '/resources/background.jpg' }
+                    try {
+                        const bp: any = injector.get(BOOTSTRAP_DATA)
+                        const p: string|undefined = bp?.userPluginsPath
+                        if (typeof p === 'string' && p.length > 0) {
+                            cachedDataDir = p.replace(/[\\/](plugins|node_modules)([\\/].*)?$/i, '').replace(/\\/g, '/')
+                            return cachedDataDir + '/resources/background.jpg'
+                        }
+                    } catch { /* 不可用时无壁纸 */ }
+                    cachedDataDir = ''
+                    return ''
+                }
+
+                const applyGlassVars = () => {
+                    const g = config.store.glass ?? {}
+                    let styleEl = document.querySelector('style#glass-vars') as HTMLStyleElement | null
+                    if (!styleEl) {
+                        styleEl = document.createElement('style')
+                        styleEl.id = 'glass-vars'
+                        document.head.appendChild(styleEl)
+                    }
+                    // 留空 = 默认图 (<userData>/resources/background.jpg); 显式路径优先.
+                    // 协议判定必须含 '//' —— 单字母盘符 'D:' 会被 '^[a-z]+:' 误判为协议
+                    const wp: string = g.wallpaper || defaultWallpaper()
+                    const enabled = g.wallpaperEnabled !== false
+                    let imageValue = 'none'
+                    if (wp && enabled) {
+                        const url = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(wp) ? wp : 'file:///' + wp.replace(/\\/g, '/')
+                        imageValue = `url("${url}")`
+                    }
+                    styleEl.textContent = `:root{--glass-wallpaper-image:${imageValue};` +
+                        `--glass-wallpaper-opacity:${g.wallpaperOpacity ?? 0.7};` +
+                        `--glass-overlay-top:${g.overlayTop ?? 0.5};` +
+                        `--glass-overlay-bottom:${g.overlayBottom ?? 0.78}}`
+                }
+                applyGlassVars()
+
+                // 诊断接口
                 ;(window as any).__glassConfig = config
-                ;(window as any).__glassRefresh = () => engine.refreshVisuals()
-                ;(window as any).__glassSetTheme = (on: boolean) => engine.set(on)
-                ;(window as any).__glassDefaultWallpaper = () => engine.defaultWallpaper()
+                ;(window as any).__glassRefresh = applyGlassVars
+                ;(window as any).__glassDefaultWallpaper = defaultWallpaper
 
-                // 快捷键: 切换背景图开关 (Ctrl-Alt-B, 可在 设置 → 热键 修改)
+                // changed$ 分发链可能被前方订阅者异常中断, 故:
+                // 1) 设置页走 __glassRefresh 直调
+                // 2) 此处订阅做双保险
+                config.changed$.subscribe(() => applyGlassVars())
+
+                // 快捷键: 切换背景图开关 (Ctrl-Alt-B)
                 injector.get(HotkeysService).hotkey$.subscribe(hotkey => {
                     if (hotkey === 'glass-toggle-wallpaper') {
                         config.store.glass.wallpaperEnabled = config.store.glass.wallpaperEnabled === false

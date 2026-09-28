@@ -11,29 +11,6 @@ import { ConfigService } from 'tabby-core'
             <h3>Glass Theme</h3>
 
             <div class="form-line">
-                <div class="form-check form-switch">
-                    <input
-                        class="form-check-input"
-                        type="checkbox"
-                        role="switch"
-                        id="glassThemeEnabled"
-                        [checked]="glass.themeEnabled !== false"
-                        (change)="setThemeEnabled($event)"
-                    >
-                    <label class="form-check-label" for="glassThemeEnabled">启用主题</label>
-                </div>
-                <div class="header">
-                    <div class="description">
-                        Theme 注入总开关。关闭后完整还原您原本的主题与全部设置 (原值快照保存在 glass.lockBackup)。
-                    </div>
-                    <div class="description" *ngIf="glass.themeEnabled !== false">
-                        接管中: 标签位置 / 窗口边框 / 不透明度 0.93 / 亚克力 / 终端背景 / 停靠 / 侧栏 / 标签宽度 / 终端字体与配色
-                        —— 被锁项在 设置 → Window 页显示 <i class="fas fa-lock glass-lock-badge"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-line">
                 <div class="header">
                     <div class="title">背景图</div>
                     <div class="description">
@@ -133,14 +110,6 @@ export class GlassSettingsTabComponent {
 
     setEnabled (event: Event): void {
         this.glass.wallpaperEnabled = (event.target as HTMLInputElement).checked
-        this.save()
-    }
-
-    setThemeEnabled (event: Event): void {
-        const on = (event.target as HTMLInputElement).checked
-        this.glass.themeEnabled = on
-        // 总开关立即生效 (接管/还原), 不等 debounce 分发链
-        ;(window as any).__glassSetTheme?.(on)
         this.save()
     }
 
