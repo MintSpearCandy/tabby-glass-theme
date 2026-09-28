@@ -1,5 +1,5 @@
 import { NgModule, Injectable, Injector, ApplicationRef, NgZone } from '@angular/core'
-import { Theme, ConfigProvider, ConfigService, HostWindowService, HotkeysService, HotkeyProvider, HotkeyDescription, ThemesService, BOOTSTRAP_DATA } from 'tabby-core'
+import { Theme, ConfigProvider, ConfigService, HostWindowService, HotkeysService, HotkeyProvider, HotkeyDescription, BOOTSTRAP_DATA } from 'tabby-core'
 import { TerminalColorSchemeProvider } from 'tabby-terminal'
 import { SettingsTabProvider } from 'tabby-settings'
 
@@ -42,7 +42,7 @@ class GlassTheme extends Theme {
 const IR_BLACK: TerminalColorScheme = {
     name: 'IR_Black',
     foreground: '#f8f8f8',
-    background: '#000000',
+    background: '#00000000',
     cursor: '#808080',
     cursorAccent: '#000000',
     selection: 'rgba(255, 255, 255, 0.15)',
@@ -169,17 +169,50 @@ class GlassConfigProvider extends ConfigProvider {
                         `--glass-overlay-bottom:${g.overlayBottom ?? 0.78}}`
                 }
 
-                // ============ Glass 主题总开关 (Theme 注入整体隔离) ============
-                // 开 = Glass 接管: appearance.theme→Glass (CSS 由 ThemesService 整体注入) +
-                //      冲突配置锁定 + 显示偏好迁移 (字体/配色/前端等);
-                // 关 = 完整还原: theme 回用户原主题 (Glass CSS 随之卸载, 用户自定义 CSS 不动),
-                //      所有被接管键按快照还原, CSS 旁路 (壁纸变量/锁定徽标) 一并清除.
+                // ============ Glass 主题总开关 (CSS 直写隔离方案) ============
+                // 核心原则: appearance.theme 永不被修改 —— ThemesService 的 CSS 与变量
+                // 状态在任何时候都自洽 (彻底回避"关闭后变量未注入/白底/恢复链被中断"类问题).
+                //  开 = Glass CSS 直接写入 <style id="theme"> (用户原 CSS 快照在会话内存),
+                //       冲突配置锁定 + 显示偏好迁移 (字体/配色等) 照旧;
+                //  关 = 把快照的用户 CSS 字符串原样写回 (零依赖, 不经任何 Tabby 恢复链),
+                //       配置按快照还原, 壁纸变量/徽标旁路一并清除;
+                //  守约 = 开启期间 changed$ 后若 style#theme 被外部重放覆盖 → 重新写 Glass CSS.
+                // 终端透明路线: terminal.background 锁 'colorScheme' + IR_BLACK 背景带 alpha
+                //  → xterm canvas 透明、壁纸透出, 不依赖 Theme 对象被 ThemesService 应用.
                 //
-                // 背景约束 (Tabby 1.0.235 源码实证): ConfigProxy 访问器 configurable:false,
-                // save() 无 before 钩子整体 dump _store → "运行时拦截、落盘零变化"不可行,
-                // 故采用快照方案: 用户原值持久存于 glass.lockBackup (崩溃安全, 残留自愈).
-                const GLASS_THEME_NAME = 'Glass'
-                const FALLBACK_THEME_NAME = 'Follow the color scheme' // Tabby 内置默认主题名
+                // 配置层背景约束 (Tabby 源码实证): ConfigProxy 访问器 configurable:false,
+                // save() 无 before 钩子整体 dump _store → 配置锁定采用快照方案:
+                // 用户原值持久存于 glass.lockBackup (崩溃安全, 残留自愈).
+                const GLASS_CSS: string = require('./theme.scss')
+                let userThemeCss: string | null = null // 会话内用户主题 CSS 快照 (重启后按配置重建)
+
+                const glassCssActive = (): boolean => {
+                    const el = document.querySelector('style#theme') as HTMLStyleElement | null
+                    return !!el && el.textContent.includes('.glass-lock-badge') // Glass 独有标记
+                }
+                const applyGlassCss = () => {
+                    let el = document.querySelector('style#theme') as HTMLStyleElement | null
+                    if (!el) {
+                        el = document.createElement('style')
+                        el.id = 'theme'
+                        document.head.appendChild(el)
+                    }
+                    // 首次遇到"非 Glass 的用户主题 CSS"时快照 (不覆盖已有快照)
+                    if (userThemeCss === null && !glassCssActive() && el.textContent) {
+                        userThemeCss = el.textContent
+                    }
+                    el.textContent = GLASS_CSS
+                }
+                const restoreUserCss = () => {
+                    const el = document.querySelector('style#theme') as HTMLStyleElement | null
+                    if (!el) { return }
+                    if (userThemeCss !== null) {
+                        el.textContent = userThemeCss
+                        userThemeCss = null
+                    }
+                    // 无快照 (重启后关闭): 当前已是用户主题 CSS (ThemesService 按未变的
+                    // appearance.theme 正常应用), 无需动作
+                }
 
                 interface OverrideSpec {
                     section: 'appearance'|'terminal'|null
@@ -189,15 +222,14 @@ class GlassConfigProvider extends ConfigProvider {
                     guarded?: boolean
                 }
                 const OVERRIDES: OverrideSpec[] = [
-                    // --- 守约组: 主题选择 + 与玻璃显示直接冲突的 8 项 ---
-                    { section: 'appearance', key: 'theme', value: GLASS_THEME_NAME, guarded: true },
+                    // --- 守约组: 与玻璃显示直接冲突的项 (开启期间锁定) ---
                     { section: 'appearance', key: 'tabsLocation', value: 'top', guarded: true },  // 侧/底 tab 栏布局与主题 CSS 不兼容
                     { section: 'appearance', key: 'frame', value: 'thin', guarded: true },        // native 需重启; full 额外插入 title-bar
                     { section: 'appearance', key: 'flexTabs', value: false, guarded: true },      // true 时 tab 宽度走动画内联样式, 压不住
                     { section: 'appearance', key: 'opacity', value: 0.93, guarded: true },        // 主题默认 (wezterm M.opacity)
                     { section: 'appearance', key: 'vibrancy', value: false, guarded: true },      // 系统亚克力与窗内壁纸是双背景体系
                     { section: 'appearance', key: 'dock', value: 'off', guarded: true },          // 停靠改变窗口几何并触发 title-bar
-                    { section: 'terminal', key: 'background', value: 'theme', guarded: true },    // 'colorScheme' 会让终端背景糊死壁纸
+                    { section: 'terminal', key: 'background', value: 'colorScheme', guarded: true }, // 终端背景走配色 (IR_BLACK 背景带 alpha → 透壁纸)
                     { section: null, key: 'showProfileTree', value: false, guarded: true },       // 侧栏打破 tab 栏通栏假设
                     // --- 迁移组: 开启时一次性接管为 Glass 偏好 (开启期间可自由改, 关闭时还原) ---
                     { section: 'terminal', key: 'colorScheme', value: undefined },
@@ -242,17 +274,13 @@ class GlassConfigProvider extends ConfigProvider {
                     return !!b && Object.keys(b).length > 0
                 }
 
-                // 开启: 快照用户世界 (theme 原值若已是 Glass → 映射默认主题, 保证"关"能退出 Glass)
-                //       → 全量写 Glass 世界值 → 快照持久化
+                // 开启: 快照用户世界 (配置原值) → 写锁定/迁移值 → Glass CSS 直写 → 快照持久化
                 const enableTheme = () => {
                     console.log('[glass] enableTheme: start')
                     const backup: any = {}
                     for (const spec of OVERRIDES) {
                         const id = (spec.section ?? '_') + '.' + spec.key
-                        let current = rawValue(spec)
-                        if (spec.key === 'theme' && current === GLASS_THEME_NAME) {
-                            current = FALLBACK_THEME_NAME
-                        }
+                        const current = rawValue(spec)
                         backup[id] = current
                         // 守约组强制写锁定值; 迁移组仅"补默认" —— 用户有显式值
                         // (含上次 Glass 期间保留的修改)时尊重用户, 不覆盖
@@ -262,49 +290,32 @@ class GlassConfigProvider extends ConfigProvider {
                     }
                     config.store.glass.lockBackup = backup
                     config.store.glass.themeEnabled = true
-                    console.log('[glass] enableTheme: snapshot theme=' + backup['appearance.theme'] + ' keys=' + Object.keys(backup).length)
+                    console.log('[glass] enableTheme: snapshot keys=' + Object.keys(backup).length)
                     // OS 窗口不透明度是进程级副作用, setOpacity 定义在 tabby-electron 实现层
                     const hostWindow = injector.get(HostWindowService) as any
                     hostWindow.setOpacity?.(0.93)
+                    applyGlassCss()
                     config.save().then(
                         () => console.log('[glass] enableTheme: save done'),
                         e => console.log('[glass] enableTheme: SAVE REJECT', e),
                     )
-                    // 主动驱动主题应用 (与 disable 对称): 直接让 ThemesService 以
-                    // appearance.theme=Glass 重写 style#theme, 不依赖 changed$ 间接链.
-                    // applyThemeVariables 必须补调 —— changed$ 分发链可能被前方订阅者
-                    // 的异常中断, 届时仅有 CSS 切换而无变量注入 (follows 主题全靠变量渲染)
-                    try {
-                        const themes: any = injector.get(ThemesService)
-                        themes?.applyCurrentTheme?.()
-                        themes?.applyThemeVariables?.()
-                        console.log('[glass] enableTheme: applyCurrentTheme done')
-                    } catch (e) {
-                        console.log('[glass] enableTheme: applyCurrentTheme skip', e)
-                    }
                 }
 
-                // 关闭: 按快照还原 (undefined → 删除键恢复"未设置"态), 清除 CSS 旁路与视觉状态
+                // 关闭: CSS 快照写回 (零依赖) → 配置按快照还原 → 清旁路
                 const disableTheme = () => {
                     console.log('[glass] disableTheme: start')
                     const backup: any = (config as any)._store?.glass?.lockBackup ?? {}
                     if (!backup || Object.keys(backup).length === 0) {
-                        console.log('[glass] disableTheme: EMPTY BACKUP (快照缺失, 无法还原 theme/迁移键)')
+                        console.log('[glass] disableTheme: EMPTY BACKUP (快照缺失, 迁移键无法还原)')
                     }
                     for (const spec of OVERRIDES) {
                         const id = (spec.section ?? '_') + '.' + spec.key
-                        let original = backup[id]
+                        const original = backup[id]
                         // 迁移组条件还原: 开启期间被用户改过的键 (当前值 ≠ Glass 迁移值)
                         // 保留用户的修改 —— 关闭不能吞掉用户在 Glass 世界里做的调整
-                        // (如改过的字体/配色); 守约组不受此影响 (守约本身保证值未被改).
                         if (!spec.guarded && !sameValue(rawValue(spec), spec.value)) {
                             console.log('[glass] disableTheme: keep user-modified ' + id)
                             continue
-                        }
-                        // 兜底映射: 快照里 theme 若是未映射的 Glass (任何历史路径造成),
-                        // 还原目标强制改为默认主题 —— 保证关闭后 Glass CSS 一定卸载
-                        if (spec.key === 'theme' && original === GLASS_THEME_NAME) {
-                            original = FALLBACK_THEME_NAME
                         }
                         if (original === undefined) {
                             if (spec.section) {
@@ -321,28 +332,16 @@ class GlassConfigProvider extends ConfigProvider {
                     const userOpacity = typeof backup['appearance.opacity'] === 'number' ? backup['appearance.opacity'] : 1
                     const hostWindow = injector.get(HostWindowService) as any
                     hostWindow.setOpacity?.(userOpacity)
+                    restoreUserCss()
                     config.save().then(
                         () => console.log('[glass] disableTheme: save done'),
                         e => console.log('[glass] disableTheme: SAVE REJECT', e),
                     )
-                    // 主动驱动主题 CSS 卸载: 不等 changed$ 间接链, 直接让 ThemesService
-                    // 以还原后的 appearance.theme 重应用 (Glass CSS 立即被替换为用户主题).
-                    // applyThemeVariables 必须补调: 默认主题是 followsColorScheme, 全部
-                    // --theme-*/--bs-* 变量靠它注入 —— 缺失时组件样式大面积失效
-                    // ("关闭后页面元素混乱"的根因, rootInlineStyle 停留在 40 字符备份态)
-                    try {
-                        const themes: any = injector.get(ThemesService)
-                        themes?.applyCurrentTheme?.()
-                        themes?.applyThemeVariables?.()
-                        console.log('[glass] disableTheme: applyCurrentTheme done')
-                    } catch (e) {
-                        console.log('[glass] disableTheme: applyCurrentTheme skip', e)
-                    }
                 }
 
                 // 锁定徽标: 在宿主设置页 (设置 → Window) 被锁项的标题旁注入 🔒
                 // 锚点为 .title 文本关键词 (en 源文本 + zh-CN 常见译名), 语言不匹配时静默降级
-                const LOCK_BADGE_TEXT_RE = /opacity|window frame|tabs location|tabs width|acrylic background|vibrancy|background type|profile sidebar|dock the terminal|不透明度|窗口边框|边框|标签页?位置|标签页?宽度|亚克力|模糊|背景类型|配置文件|个人资料|侧边栏|停靠/
+                const LOCK_BADGE_TEXT_RE = /opacity|window frame|tabs location|tabs width|acrylic background|vibrancy|background type|profile sidebar|dock the terminal|terminal background|不透明度|窗口边框|边框|标签页?位置|标签页?宽度|亚克力|模糊|背景类型|终端背景|配置文件|个人资料|侧边栏|停靠/
                 const injectLockBadges = () => {
                     const titles = document.querySelectorAll('settings-tab .header .title')
                     titles.forEach(t => {
@@ -413,8 +412,6 @@ class GlassConfigProvider extends ConfigProvider {
                     }
                     setEnabledVisualState(on)
                     applyGlassVars()
-                    // save() 已在 enable/disable 内调用, changed$ 驱动 ThemesService 重应用主题 CSS
-                    // 及 vibrancy/opacity/WCO 等副作用链
                     try {
                         injector.get(ApplicationRef).tick()
                     } catch { /* ApplicationRef 不可用时跳过 (模板绑定由 changed$ 链路兜底刷新) */ }
@@ -423,13 +420,16 @@ class GlassConfigProvider extends ConfigProvider {
                 // 启动初始化:
                 //  - 开关开 + 无快照 → 首次接管 (建快照, 补齐 Glass 值)
                 //  - 开关关 + 有快照 → 上次未正常关闭 (崩溃/强杀) → 自愈还原
-                //  - 开关开 + 有快照 → 状态已在配置中, 仅对齐视觉状态
+                //  - 开关开 → Glass CSS 直写 (覆盖 ThemesService 应用的用户主题 CSS, 并快照之)
                 console.log('[glass] init: themeEnabled=' + isThemeEnabled() + ' hasBackup=' + hasBackup())
                 if (isThemeEnabled() && !hasBackup()) {
                     enableTheme()
                 }
                 if (!isThemeEnabled() && hasBackup()) {
                     disableTheme()
+                }
+                if (isThemeEnabled()) {
+                    applyGlassCss()
                 }
                 setEnabledVisualState(isThemeEnabled())
                 applyGlassVars()
@@ -441,11 +441,21 @@ class GlassConfigProvider extends ConfigProvider {
 
                 // changed$ 分发链可能被前方订阅者的异常中断, 故:
                 // 1) 设置页走 __glassRefresh 直调 (glassSettingsTab.save)
-                // 2) 此处订阅做双保险 (守约重放 + 变量同步)
+                // 2) 此处订阅做双保险 (CSS 守约 + 配置守约 + 变量同步)
                 config.changed$.subscribe(() => {
                     applyGlassVars()
-                    // 守约: 开启期间 guarded 组被外部改动 (其他窗口/直改配置文件) → 重写 Glass 值
+                    // 守约: 开启期间保持 Glass 世界 (CSS 与锁定配置)
                     if (isThemeEnabled()) {
+                        // CSS 守约必须在宏任务里复查 —— 本订阅注册早于 ThemesService, 同一次
+                        // changed$ 广播中我们先执行 (此刻 CSS 尚未被覆盖), ThemesService 随后
+                        // 按 (未变的) appearance.theme 重写 style#theme 为用户主题 CSS.
+                        // 延迟到下一轮宏任务再检测, 覆盖必被纠正
+                        setTimeout(() => {
+                            if (isThemeEnabled() && !glassCssActive()) {
+                                console.log('[glass] guard: css overwritten, re-applying')
+                                applyGlassCss()
+                            }
+                        }, 0)
                         let drifted = false
                         for (const spec of OVERRIDES) {
                             if (spec.guarded && !sameValue(storeValue(spec), spec.value)) {
@@ -463,7 +473,6 @@ class GlassConfigProvider extends ConfigProvider {
                         setEnabledVisualState(true)
                     }
                 })
-
                 // 快捷键: 切换背景图开关 (Ctrl-Alt-B, 可在 设置 → 热键 修改)
                 injector.get(HotkeysService).hotkey$.subscribe(hotkey => {
                     if (hotkey === 'glass-toggle-wallpaper') {
