@@ -499,6 +499,16 @@ class GlassConfigProvider extends ConfigProvider {
                 }
                 if (isThemeEnabled()) {
                     applyGlassCss()
+                    // 启动覆盖防御: 本订阅链先于 ThemesService 的 ready$ 订阅执行,
+                    // Glass CSS 写入后会被其 applyCurrentTheme 覆盖为用户主题 CSS,
+                    // 而启动阶段没有 changed$ 可依赖 —— 宏任务复查确保最终态是 Glass
+                    // (否则开态重启后一直显示默认主题, 直到首次改配置触发 save 才纠正)
+                    setTimeout(() => {
+                        if (isThemeEnabled() && !glassCssActive()) {
+                            console.log('[glass] init: css overwritten at boot, re-applying')
+                            applyGlassCss()
+                        }
+                    }, 0)
                 }
                 setEnabledVisualState(isThemeEnabled())
                 applyGlassVars()
