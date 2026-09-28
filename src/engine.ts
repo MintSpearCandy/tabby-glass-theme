@@ -186,6 +186,19 @@ export class GlassSwitchEngine {
         '--theme-tertiary-fg': '#b3b7c4',
         '--theme-tertiary-active-bg': '#353947',
         '--theme-tertiary-active-fg': '#ffffff',
+        // --bs-* 系: 与 --theme-* 同一条计算链, 同样被透明背景污染
+        // (漏掉时: 次要文字/下拉非激活项透明) —— 值与主题字色提亮体系对齐
+        '--bs-secondary-color': 'rgba(255, 255, 255, 0.75)',
+        '--bs-secondary-color-rgb': '255, 255, 255',
+        '--bs-tertiary-color': 'rgba(255, 255, 255, 0.55)',
+        '--bs-tertiary-color-rgb': '255, 255, 255',
+        '--bs-secondary-bg': '#14161c',
+        '--bs-tertiary-bg': '#0e0f14',
+        '--bs-secondary': '#1b1d24',
+        '--bs-tertiary': '#20232c',
+        '--bs-dark': '#17181d',
+        '--bs-dark-bg': '#101115',
+        '--bs-dark-color': '#e8e8ec',
     }
 
     private applyThemeVars (): void {
