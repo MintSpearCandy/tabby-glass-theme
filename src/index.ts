@@ -274,6 +274,18 @@ class GlassConfigProvider extends ConfigProvider {
                     return !!b && Object.keys(b).length > 0
                 }
 
+                // 防御迁移: 历史多轮开关循环中, terminal.background 的锁定值 'colorScheme'
+                // 曾串位写进 terminal.colorScheme 对象内部 (colorScheme.background='colorScheme'),
+                // 无效色值导致 xterm 画布与边缘色差. 检测到非法 background 字段时删除整个对象
+                // (回退 Tabby Default 默认配色), 幂等.
+                const repairCorruptedColorScheme = () => {
+                    const cs = (config as any)._store?.terminal?.colorScheme
+                    if (cs && typeof cs.background === 'string' && !/^#|^rgb/i.test(cs.background)) {
+                        console.log('[glass] repair: corrupted colorScheme.background=' + JSON.stringify(cs.background) + ', removing object')
+                        delete (config as any)._store.terminal.colorScheme
+                    }
+                }
+
                 // 开启: 快照用户世界 (配置原值) → 写锁定/迁移值 → Glass CSS 直写 → 快照持久化
                 const enableTheme = () => {
                     console.log('[glass] enableTheme: start')
@@ -422,6 +434,7 @@ class GlassConfigProvider extends ConfigProvider {
                 //  - 开关关 + 有快照 → 上次未正常关闭 (崩溃/强杀) → 自愈还原
                 //  - 开关开 → Glass CSS 直写 (覆盖 ThemesService 应用的用户主题 CSS, 并快照之)
                 console.log('[glass] init: themeEnabled=' + isThemeEnabled() + ' hasBackup=' + hasBackup())
+                repairCorruptedColorScheme()
                 if (isThemeEnabled() && !hasBackup()) {
                     enableTheme()
                 }
