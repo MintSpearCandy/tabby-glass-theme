@@ -271,10 +271,13 @@ class GlassConfigProvider extends ConfigProvider {
                         e => console.log('[glass] enableTheme: SAVE REJECT', e),
                     )
                     // 主动驱动主题应用 (与 disable 对称): 直接让 ThemesService 以
-                    // appearance.theme=Glass 重写 style#theme, 不依赖 changed$ 间接链
+                    // appearance.theme=Glass 重写 style#theme, 不依赖 changed$ 间接链.
+                    // applyThemeVariables 必须补调 —— changed$ 分发链可能被前方订阅者
+                    // 的异常中断, 届时仅有 CSS 切换而无变量注入 (follows 主题全靠变量渲染)
                     try {
                         const themes: any = injector.get(ThemesService)
                         themes?.applyCurrentTheme?.()
+                        themes?.applyThemeVariables?.()
                         console.log('[glass] enableTheme: applyCurrentTheme done')
                     } catch (e) {
                         console.log('[glass] enableTheme: applyCurrentTheme skip', e)
@@ -323,10 +326,14 @@ class GlassConfigProvider extends ConfigProvider {
                         e => console.log('[glass] disableTheme: SAVE REJECT', e),
                     )
                     // 主动驱动主题 CSS 卸载: 不等 changed$ 间接链, 直接让 ThemesService
-                    // 以还原后的 appearance.theme 重应用 (Glass CSS 立即被替换为用户主题)
+                    // 以还原后的 appearance.theme 重应用 (Glass CSS 立即被替换为用户主题).
+                    // applyThemeVariables 必须补调: 默认主题是 followsColorScheme, 全部
+                    // --theme-*/--bs-* 变量靠它注入 —— 缺失时组件样式大面积失效
+                    // ("关闭后页面元素混乱"的根因, rootInlineStyle 停留在 40 字符备份态)
                     try {
                         const themes: any = injector.get(ThemesService)
                         themes?.applyCurrentTheme?.()
+                        themes?.applyThemeVariables?.()
                         console.log('[glass] disableTheme: applyCurrentTheme done')
                     } catch (e) {
                         console.log('[glass] disableTheme: applyCurrentTheme skip', e)

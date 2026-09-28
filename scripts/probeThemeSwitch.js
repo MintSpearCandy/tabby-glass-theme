@@ -10,7 +10,7 @@
  */
 const fs = require('fs')
 const PORT = process.env.CDP_PORT || 9231
-const CFG = process.env.GLASS_CFG || 'D:/Home/Project/TabbyPlugins/WebViewer/test-env/tabby-port/data/config.yaml'
+const CFG = process.env.GLASS_CFG || 'D:/Env/TabbyEnv/instances/main/data/config.yaml'
 
 async function connectMain () {
     let list

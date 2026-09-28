@@ -31,7 +31,7 @@ const png = Buffer.concat([
     chunk('IDAT', zlib.deflateSync(raw)),
     chunk('IEND', Buffer.alloc(0)),
 ])
-const out = process.argv[2] || 'D:/Env/TabbyEnv/tabby-1.0.235-portable-x64/data/resources/background.jpg'
+const out = process.argv[2] || 'D:/Env/TabbyEnv/instances/main/data/resources/background.jpg'
 fs.mkdirSync(require('path').dirname(out), { recursive: true })
 fs.writeFileSync(out, png)
 console.log('written', out, png.length, 'bytes')

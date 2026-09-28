@@ -5,7 +5,7 @@
  */
 const fs = require('fs')
 const PORT = process.env.CDP_PORT || 9226
-const CFG = 'D:/Home/Project/TabbyPlugins/WebViewer/test-env/tabby-port/data/config.yaml'
+const CFG = process.env.GLASS_CFG || 'D:/Env/TabbyEnv/instances/main/data/config.yaml'
 
 async function connectMain () {
     const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()
