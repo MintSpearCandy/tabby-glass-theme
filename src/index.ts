@@ -268,6 +268,20 @@ class GlassConfigProvider extends ConfigProvider {
                     return false
                 }
 
+                // ===== 终端背景字段级接管 (不影响用户配色选择) =====
+                // 开启期间: 保留用户配色的 name/前景/16色, 仅把 background 字段改为透明
+                // (xterm canvas 透明 → 壁纸透出); 完整原对象存快照, 关闭时还原.
+                const TRANSPARENT_BG = '#00000000'
+                const isPlainObject = (v: any) => !!v && typeof v === 'object' && !Array.isArray(v)
+                const withTransparentBg = (cs: any) => ({ __nonStructural: true, ...cs, background: TRANSPARENT_BG })
+                /** 比较 colorScheme 时忽略 background 字段 (判定用户是否换过配色) */
+                const sameSchemeIgnoringBg = (a: any, b: any) => {
+                    if (!isPlainObject(a) || !isPlainObject(b)) { return a === b }
+                    const { background: _a, ...ra } = a
+                    const { background: _b, ...rb } = b
+                    return JSON.stringify(ra) === JSON.stringify(rb)
+                }
+
                 const isThemeEnabled = () => (config as any)._store?.glass?.themeEnabled !== false
                 const hasBackup = () => {
                     const b = (config as any)._store?.glass?.lockBackup
@@ -295,8 +309,12 @@ class GlassConfigProvider extends ConfigProvider {
                         const current = rawValue(spec)
                         backup[id] = current
                         // 守约组强制写锁定值; 迁移组仅"补默认" —— 用户有显式值
-                        // (含上次 Glass 期间保留的修改)时尊重用户, 不覆盖
-                        if (spec.guarded || current === undefined) {
+                        // (含上次 Glass 期间保留的修改)时尊重用户, 不覆盖.
+                        // colorScheme 例外: 字段级背景接管 —— 用户配色仅 background 置透明,
+                        // 其余 (name/前景/16色) 原样保留, 快照存完整原对象.
+                        if (spec.key === 'colorScheme') {
+                            writeValue(spec, isPlainObject(current) ? withTransparentBg(current) : spec.value)
+                        } else if (spec.guarded || current === undefined) {
                             writeValue(spec, spec.value)
                         }
                     }
@@ -323,6 +341,16 @@ class GlassConfigProvider extends ConfigProvider {
                     for (const spec of OVERRIDES) {
                         const id = (spec.section ?? '_') + '.' + spec.key
                         const original = backup[id]
+                        // colorScheme 还原: 未换配色 (除 background 外一致) → 完整还原快照
+                        // (用户的原 background 色值一并还原); 换过配色 → 保留新选择
+                        // (透明 background 随行 —— 关闭态透明在默认主题深底上视觉正常)
+                        if (spec.key === 'colorScheme') {
+                            const cur = rawValue(spec)
+                            if (isPlainObject(original) && isPlainObject(cur) && !sameSchemeIgnoringBg(cur, original)) {
+                                console.log('[glass] disableTheme: keep user-switched colorScheme')
+                                continue
+                            }
+                        }
                         // 迁移组条件还原: 开启期间被用户改过的键 (当前值 ≠ Glass 迁移值)
                         // 保留用户的修改 —— 关闭不能吞掉用户在 Glass 世界里做的调整
                         if (!spec.guarded && !sameValue(rawValue(spec), spec.value)) {
@@ -475,6 +503,17 @@ class GlassConfigProvider extends ConfigProvider {
                                 console.log('[glass] guard drift: ' + (spec.section ?? '_') + '.' + spec.key + ' -> ' + JSON.stringify(spec.value))
                                 writeValue(spec, spec.value)
                                 drifted = true
+                            }
+                        }
+                        // 终端背景字段级守约: 开启期间任何来源写入的 colorScheme (用户切换配色/
+                        // 恢复默认等) 其 background 一律保持透明 —— 不 save, 由触发本次
+                        // changed$ 的那条链自然落盘
+                        {
+                            const csSpec = OVERRIDES.find(o => o.key === 'colorScheme')!
+                            const cs = rawValue(csSpec)
+                            if (isPlainObject(cs) && cs.background !== TRANSPARENT_BG) {
+                                console.log('[glass] guard: colorScheme.background -> transparent')
+                                writeValue(csSpec, withTransparentBg(cs))
                             }
                         }
                         if (drifted) {
