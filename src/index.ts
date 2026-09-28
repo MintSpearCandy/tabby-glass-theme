@@ -141,13 +141,65 @@ class GlassConfigProvider extends ConfigProvider {
                 }
                 ;(window as any).__glassDefaultWallpaper = defaultWallpaper
 
+                // Glass 接管期的 --theme-* 变量集: 终端配色背景被透明化后, ThemesService 的
+                // 变量计算 (Color().lighten/darken) 会把 bg/dark/secondary/tertiary 全系连同
+                // 其 -fg 文字色算成 hsla(0,0%,0%,0) 透明 → 消费这些变量的淡色文字 (未激活
+                // 配置项/次要说明等) 集体消失. 开启期间由本插件定义这套变量 (Glass 深色调),
+                // 关闭时整体移除 (交还 ThemesService 正常注入).
+                const GLASS_THEME_VARS: Record<string, string> = {
+                    '--theme-bg': 'rgba(10,12,18,0.72)',
+                    '--theme-bg-more': 'rgba(16,19,28,0.82)',
+                    '--theme-bg-more-2': 'rgba(22,26,38,0.9)',
+                    '--theme-bg-less': 'rgba(6,8,12,0.55)',
+                    '--theme-bg-less-2': 'rgba(3,4,7,0.4)',
+                    '--theme-dark': '#17181d',
+                    '--theme-dark-more': '#101115',
+                    '--theme-dark-more-2': '#0a0b0e',
+                    '--theme-dark-less': '#2b2d36',
+                    '--theme-dark-less-2': '#40434f',
+                    '--theme-dark-fg': '#e8e8ec',
+                    '--theme-dark-active-bg': '#2b2d36',
+                    '--theme-dark-active-fg': '#ffffff',
+                    '--theme-secondary': '#1b1d24',
+                    '--theme-secondary-more': '#14161c',
+                    '--theme-secondary-more-2': '#0e0f14',
+                    '--theme-secondary-less': '#2f323d',
+                    '--theme-secondary-less-2': '#464a58',
+                    '--theme-secondary-fg': '#c9ccd6',
+                    '--theme-secondary-active-bg': '#2f323d',
+                    '--theme-secondary-active-fg': '#ffffff',
+                    '--theme-tertiary': '#20232c',
+                    '--theme-tertiary-more': '#171a21',
+                    '--theme-tertiary-more-2': '#101218',
+                    '--theme-tertiary-less': '#353947',
+                    '--theme-tertiary-less-2': '#4d5263',
+                    '--theme-tertiary-fg': '#b3b7c4',
+                    '--theme-tertiary-active-bg': '#353947',
+                    '--theme-tertiary-active-fg': '#ffffff',
+                }
+                const applyGlassThemeVars = () => {
+                    if ((config as any)._store?.glass?.themeEnabled === false) {
+                        for (const k of Object.keys(GLASS_THEME_VARS)) {
+                            document.documentElement.style.removeProperty(k)
+                        }
+                        return
+                    }
+                    // 写在 documentElement inline —— 必须在 ThemesService 每次 changed$ 注入
+                    // 之后再写才能覆盖 (本订阅链先于它, 宏任务复查段会补一次)
+                    for (const [k, v] of Object.entries(GLASS_THEME_VARS)) {
+                        document.documentElement.style.setProperty(k, v)
+                    }
+                }
+
                 const applyGlassVars = () => {
                     const styleEl0 = document.querySelector('style#glass-vars') as HTMLStyleElement | null
                     // 总开关关闭时清空壁纸变量 (Glass 世界的 CSS 旁路一并撤离)
                     if ((config as any)._store?.glass?.themeEnabled === false) {
                         if (styleEl0) { styleEl0.textContent = '' }
+                        applyGlassThemeVars()
                         return
                     }
+                    applyGlassThemeVars()
                     const g = config.store.glass ?? {}
                     let styleEl = document.querySelector('style#glass-vars') as HTMLStyleElement | null
                     if (!styleEl) {
@@ -508,6 +560,9 @@ class GlassConfigProvider extends ConfigProvider {
                             console.log('[glass] init: css overwritten at boot, re-applying')
                             applyGlassCss()
                         }
+                        if (isThemeEnabled()) {
+                            applyGlassThemeVars()
+                        }
                     }, 0)
                 }
                 setEnabledVisualState(isThemeEnabled())
@@ -533,6 +588,11 @@ class GlassConfigProvider extends ConfigProvider {
                             if (isThemeEnabled() && !glassCssActive()) {
                                 console.log('[glass] guard: css overwritten, re-applying')
                                 applyGlassCss()
+                            }
+                            // 变量同样会被 ThemesService 在本次 changed$ 中重算覆盖 (透明污染),
+                            // 宏任务补写一次确保最终值是 Glass 定义
+                            if (isThemeEnabled()) {
+                                applyGlassThemeVars()
                             }
                         }, 0)
                         let drifted = false
