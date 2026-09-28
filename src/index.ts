@@ -276,12 +276,16 @@ class GlassConfigProvider extends ConfigProvider {
                 const TRANSPARENT_BG = '#00000000'
                 const isPlainObject = (v: any) => !!v && typeof v === 'object' && !Array.isArray(v)
                 const withTransparentBg = (cs: any) => ({ __nonStructural: true, ...cs, background: TRANSPARENT_BG })
-                /** 比较 colorScheme 时忽略 background 字段 (判定用户是否换过配色) */
+                /** 比较 colorScheme 时忽略 background 字段与 __nonStructural 实现标记
+                 *  (判定用户是否换过配色; withTransparentBg 添加的标记曾使比较产生
+                 *   假阳性 "换过配色" → 跳过还原 → 透明背景残留的奇偶混乱) */
                 const sameSchemeIgnoringBg = (a: any, b: any) => {
                     if (!isPlainObject(a) || !isPlainObject(b)) { return a === b }
-                    const { background: _a, ...ra } = a
-                    const { background: _b, ...rb } = b
-                    return JSON.stringify(ra) === JSON.stringify(rb)
+                    const strip = (o: any) => {
+                        const { background: _bg, __nonStructural: _ns, ...rest } = o
+                        return rest
+                    }
+                    return JSON.stringify(strip(a)) === JSON.stringify(strip(b))
                 }
 
                 const isThemeEnabled = () => (config as any)._store?.glass?.themeEnabled !== false
