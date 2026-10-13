@@ -1,4 +1,5 @@
 import { NgModule, Injectable, Injector } from '@angular/core'
+import { CommonModule } from '@angular/common'
 import { Theme, ConfigProvider, ConfigService, HotkeysService, HotkeyProvider, HotkeyDescription, BOOTSTRAP_DATA } from 'tabby-core'
 import { TerminalColorSchemeProvider } from 'tabby-terminal'
 import { SettingsTabProvider } from 'tabby-settings'
@@ -85,6 +86,10 @@ class GlassConfigProvider extends ConfigProvider {
             wallpaperOpacity: 0.7,
             overlayTop: 0.5,
             overlayBottom: 0.78,
+            // 背景类型: 'image' (图片) | 'solid' (纯色)
+            backgroundMode: 'image',
+            // 纯色背景色值 (#RGB/#RRGGBB/#RRGGBBAA 或 rgba()); 默认微软蓝
+            solidColor: '#0078D4',
         },
     }
 
@@ -131,19 +136,62 @@ class GlassConfigProvider extends ConfigProvider {
                 }
 
                 // ---- 壁纸 CSS 变量旁路 (本主题唯一的运行时注入) ----
-                let cachedDataDir: string | null = null
-                const defaultWallpaper = (): string => {
-                    if (cachedDataDir !== null) { return cachedDataDir + '/resources/background.jpg' }
+                // 配置根目录 = Tabby 加载配置的目录: 便携版 (exe 旁有 data/) →
+                // <exeDir>/data, 否则 → Electron userData (用户配置目录). 宿主主进程
+                // portable.ts 在启动最早处已把 userData 整体重定向到 data 目录, 因此
+                // app.getPath('userData') 在两种模式下都恰好等于配置根目录.
+                let cachedConfigRoot: string | null = null
+                const configRoot = (): string => {
+                    if (cachedConfigRoot !== null) { return cachedConfigRoot }
                     try {
-                        const bp: any = injector.get(BOOTSTRAP_DATA)
-                        const p: string|undefined = bp?.userPluginsPath
-                        if (typeof p === 'string' && p.length > 0) {
-                            cachedDataDir = p.replace(/[\\/](plugins|node_modules)([\\/].*)?$/i, '').replace(/\\/g, '/')
-                            return cachedDataDir + '/resources/background.jpg'
-                        }
-                    } catch { /* 不可用时无壁纸 */ }
-                    cachedDataDir = ''
-                    return ''
+                        // @electron/remote 规约 (同 WebViewer electronApi.ts):
+                        // 必须 CJS require; 必须用 getBuiltin(), 禁 remote.require
+                        // ('electron') —— 其主进程侧依赖 Electron 43 已移除的
+                        // process.mainModule
+                        const remote: any = require('@electron/remote')
+                        cachedConfigRoot = remote.getBuiltin('app').getPath('userData').replace(/\\/g, '/')
+                    } catch {
+                        // 兜底: userPluginsPath 恒为 <userData>/plugins (宿主 app.ts)
+                        try {
+                            const bp: any = injector.get(BOOTSTRAP_DATA)
+                            const p: string|undefined = bp?.userPluginsPath
+                            cachedConfigRoot = (typeof p === 'string' && p.length > 0)
+                                ? p.replace(/[\\/](plugins|node_modules)([\\/].*)?$/i, '').replace(/\\/g, '/')
+                                : ''
+                        } catch { cachedConfigRoot = '' }
+                    }
+                    return cachedConfigRoot
+                }
+
+                const DEFAULT_WALLPAPER = './resources/backgrounds/background.jpg'
+
+                /**
+                 * 壁纸输入 → 可直接进 url("...") 的地址.
+                 *  - 带协议 (http(s)/file) → 原样;
+                 *  - Windows 盘符 / UNC / POSIX 绝对路径 → file:/// URL;
+                 *  - 其余 (含 ./ ../) → 相对配置根目录解析.
+                 * 协议判定必须含 '//' —— 单字母盘符 'D:' 会被 '^[a-z]+:' 误判为协议.
+                 */
+                const resolveWallpaper = (input: string): string => {
+                    const wp = (input || '').trim() || DEFAULT_WALLPAPER
+                    let url: string
+                    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(wp)) {
+                        url = wp
+                    } else if (/^[a-zA-Z]:[\\/]/.test(wp) || /^\\\\/.test(wp) || /^\//.test(wp)) {
+                        url = 'file:///' + wp.replace(/\\/g, '/')
+                    } else {
+                        const root = configRoot()
+                        if (!root) { return '' }
+                        url = 'file:///' + root + '/' + wp.replace(/^[./\\]+/, '')
+                    }
+                    // 中文/空格路径转义; # ? 有查询/片段语义必须手工转
+                    return encodeURI(url).replace(/#/g, '%23').replace(/\?/g, '%3F')
+                }
+
+                /** 默认壁纸的绝对路径 (设置页 placeholder 用) */
+                const defaultWallpaper = (): string => {
+                    const root = configRoot()
+                    return root ? root + '/resources/backgrounds/background.jpg' : ''
                 }
 
                 const applyGlassVars = () => {
@@ -154,14 +202,19 @@ class GlassConfigProvider extends ConfigProvider {
                         styleEl.id = 'glass-vars'
                         document.head.appendChild(styleEl)
                     }
-                    // 留空 = 默认图 (<userData>/resources/background.jpg); 显式路径优先.
-                    // 协议判定必须含 '//' —— 单字母盘符 'D:' 会被 '^[a-z]+:' 误判为协议
-                    const wp: string = g.wallpaper || defaultWallpaper()
                     const enabled = g.wallpaperEnabled !== false
                     let imageValue = 'none'
-                    if (wp && enabled) {
-                        const url = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(wp) ? wp : 'file:///' + wp.replace(/\\/g, '/')
-                        imageValue = `url("${url}")`
+                    if (enabled) {
+                        if (g.backgroundMode === 'solid') {
+                            // 纯色背景: background 简写同样接受颜色值,
+                            // 不透明度/遮罩变量照常作用于该层
+                            const c: string = g.solidColor
+                            imageValue = /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\))$/.test(c) ? c : '#0078D4'
+                        } else {
+                            // 留空 = 默认图 (配置根目录/resources/backgrounds/…); 显式路径优先
+                            const url = resolveWallpaper(g.wallpaper)
+                            if (url) { imageValue = `url("${url}")` }
+                        }
                     }
                     styleEl.textContent = `:root{--glass-wallpaper-image:${imageValue};` +
                         `--glass-wallpaper-opacity:${g.wallpaperOpacity ?? 0.7};` +
@@ -170,10 +223,11 @@ class GlassConfigProvider extends ConfigProvider {
                 }
                 applyGlassVars()
 
-                // 诊断接口
+                // 诊断接口 (设置页经 __glassRefresh/__glassConfigRoot 复用)
                 ;(window as any).__glassConfig = config
                 ;(window as any).__glassRefresh = applyGlassVars
                 ;(window as any).__glassDefaultWallpaper = defaultWallpaper
+                ;(window as any).__glassConfigRoot = configRoot
 
                 // changed$ 分发链可能被前方订阅者异常中断, 故:
                 // 1) 设置页走 __glassRefresh 直调
@@ -193,6 +247,10 @@ class GlassConfigProvider extends ConfigProvider {
 }
 
 @NgModule({
+    // 设置页模板用 *ngIf (图片/纯色区块互斥), 需 CommonModule 提供指令
+    imports: [
+        CommonModule,
+    ],
     declarations: [
         GlassSettingsTabComponent,
     ],

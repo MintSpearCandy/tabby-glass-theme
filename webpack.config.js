@@ -49,5 +49,6 @@ module.exports = {
         /^@ng-bootstrap\//,
         /^rxjs/,
         /^tabby-/,
+        '@electron/remote',
     ],
 }

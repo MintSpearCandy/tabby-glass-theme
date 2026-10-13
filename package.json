@@ -1,6 +1,6 @@
 {
   "name": "tabby-glass-theme",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Dark glass theme for Tabby (深色玻璃质感主题)",
   "keywords": [
     "tabby-plugin"
@@ -25,6 +25,7 @@
     "tabby-terminal": "*"
   },
   "devDependencies": {
+    "@angular/common": "^15.2.10",
     "@angular/core": "^15.2.0",
     "bootstrap": "^5.3.3",
     "css-loader": "^6.10.0",
